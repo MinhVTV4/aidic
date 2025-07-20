@@ -10,6 +10,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Marked.js for Markdown parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         /* Custom styles */
         body {
@@ -60,6 +62,13 @@
         .flashcard-back {
             transform: rotateY(180deg);
         }
+        /* Styles for content rendered from Markdown */
+        .prose p { margin-bottom: 0.5rem; }
+        .prose strong { font-weight: 600; }
+        .prose em { font-style: italic; }
+        .prose ul { list-style-type: disc; margin-left: 1.5rem; }
+        .prose ol { list-style-type: decimal; margin-left: 1.5rem; }
+
     </style>
 </head>
 <body class="text-gray-800">
@@ -195,7 +204,7 @@
 
             // The advanced system prompt to get structured learning data with multiple quiz types
             const prompt = `
-                Bạn là một chuyên gia ngôn ngữ và giáo viên tiếng Anh cho người Việt. Với từ khóa "${word}", hãy trả về một đối tượng JSON duy nhất. Mọi giải thích phải bằng tiếng Việt, thật chi tiết, rõ ràng và dễ hiểu.
+                Bạn là một chuyên gia ngôn ngữ và giáo viên tiếng Anh cho người Việt. Với từ khóa "${word}", hãy trả về một đối tượng JSON duy nhất. Mọi giải thích phải bằng tiếng Việt, thật chi tiết, rõ ràng và dễ hiểu. Sử dụng Markdown đơn giản (in đậm, in nghiêng, gạch đầu dòng) để định dạng các phần giải thích cho dễ đọc.
                 Đối tượng JSON phải có cấu trúc:
                 {
                   "word": "${word}",
@@ -205,7 +214,7 @@
                       "partOfSpeech": "loại từ",
                       "meanings": [
                         {
-                          "definition": "Giải thích nghĩa bằng tiếng Việt thật chi tiết, bao gồm các sắc thái và cách dùng trong các ngữ cảnh khác nhau.",
+                          "definition": "Giải thích nghĩa bằng tiếng Việt thật chi tiết, sử dụng Markdown để nhấn mạnh các điểm quan trọng.",
                           "example": "Câu ví dụ tiếng Anh."
                         }
                       ]
@@ -215,7 +224,7 @@
                   "synonyms": [ {"nuance": "Sắc thái nghĩa bằng tiếng Việt", "words": ["..."]} ],
                   "antonyms": ["..."],
                   "collocations": ["..."],
-                  "etymology": "Giải thích chi tiết và thú vị về nguồn gốc, lịch sử của từ bằng tiếng Việt.",
+                  "etymology": "Giải thích chi tiết và thú vị về nguồn gốc, lịch sử của từ bằng tiếng Việt, sử dụng Markdown.",
                   "diverseExamples": [
                       { "topic": "Chủ đề 1", "sentence": "Câu ví dụ 1", "translation": "Bản dịch tiếng Việt 1" },
                       { "topic": "Chủ đề 2", "sentence": "Câu ví dụ 2", "translation": "Bản dịch tiếng Việt 2" }
@@ -226,19 +235,19 @@
                       "question": "Câu hỏi trắc nghiệm về nghĩa của từ...",
                       "options": ["đáp án 1", "đáp án 2", "đáp án đúng"],
                       "answer": "đáp án đúng",
-                      "explanation": "Giải thích chi tiết bằng tiếng Việt tại sao đây là đáp án đúng và tại sao các đáp án khác sai."
+                      "explanation": "Giải thích chi tiết bằng tiếng Việt tại sao đây là đáp án đúng, sử dụng Markdown."
                     },
                     {
                       "type": "fill_in_the_blank",
                       "question": "Câu có chỗ trống ___ để điền từ ${word}.",
                       "answer": "${word}",
-                      "explanation": "Giải thích chi tiết bằng tiếng Việt về ngữ cảnh và tại sao từ này phù hợp."
+                      "explanation": "Giải thích chi tiết bằng tiếng Việt về ngữ cảnh, sử dụng Markdown."
                     },
                     {
                       "type": "word_formation",
                       "question": "Câu có chỗ trống và một từ gốc trong ngoặc (baseWord).",
                       "answer": "Dạng đúng của từ",
-                      "explanation": "Giải thích chi tiết bằng tiếng Việt về quy tắc cấu tạo từ và tại sao dạng từ này là đúng."
+                      "explanation": "Giải thích chi tiết bằng tiếng Việt về quy tắc cấu tạo từ, sử dụng Markdown."
                     }
                   ]
                 }
@@ -300,7 +309,7 @@
                             <div class="mt-2 space-y-3">
                                 ${(def.meanings || []).map(meaning => `
                                     <div class="pl-4 border-l-2 border-blue-200">
-                                        <p class="text-base text-gray-800">${meaning.definition}</p>
+                                        <div class="text-base text-gray-800 prose">${marked.parse(meaning.definition || '')}</div>
                                         <p class="text-sm text-gray-500 italic mt-1">"${meaning.example || 'Không có ví dụ.'}"</p>
                                     </div>
                                 `).join('')}
@@ -319,7 +328,7 @@
                     ${icon}
                     <h3 class="text-2xl font-bold text-gray-800 ml-3">${title}</h3>
                 </div>
-                <div class="mt-4 text-gray-700 space-y-2">
+                <div class="mt-4 text-gray-700 space-y-2 prose">
                     ${content}
                 </div>
             </div>`;
@@ -328,7 +337,7 @@
         function renderEtymology(etymology) {
             if (!etymology) return '';
             const icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
-            return renderSection('Nguồn gốc từ', `<p>${etymology}</p>`, icon);
+            return renderSection('Nguồn gốc từ', marked.parse(etymology), icon);
         }
 
         function renderWordFamily(family) {
@@ -391,7 +400,7 @@
                             <p class="text-gray-400 mt-2">(Nhấn để lật)</p>
                         </div>
                         <div class="flashcard-back bg-blue-600 text-white flex-col text-center p-4">
-                            <p class="text-lg">${definition}</p>
+                            <div class="text-lg prose text-white">${marked.parse(definition)}</div>
                             <p class="text-sm opacity-80 mt-2">${data.phonetic || ''}</p>
                         </div>
                     </div>
@@ -525,9 +534,11 @@
         }
         
         function showFeedback(element, isCorrect, text) {
+             const feedbackHTML = marked.parse(text || '');
              element.innerHTML = `
                 <div class="p-3 rounded-md ${isCorrect ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
-                    <b>${isCorrect ? 'Chính xác!' : 'Chưa đúng.'}</b> ${text || ''}
+                    <b class="block mb-1">${isCorrect ? 'Chính xác!' : 'Chưa đúng.'}</b> 
+                    <div class="prose prose-sm">${feedbackHTML}</div>
                 </div>`;
         }
 
