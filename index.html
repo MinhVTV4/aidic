@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Từ điển AI Pro - Học và Tương tác</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        /* Custom styles */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Light gray background */
+        }
+        /* Spinner animation */
+        .spinner {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        /* Simple fade-in animation for results */
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Flashcard styles */
+        .flashcard { perspective: 1000px; }
+        .flashcard-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+        }
+        .flashcard.is-flipped .flashcard-inner {
+            transform: rotateY(180deg);
+        }
+        .flashcard-front, .flashcard-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            border-radius: 0.75rem; /* rounded-xl */
+        }
+        .flashcard-back {
+            transform: rotateY(180deg);
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <div class="container mx-auto p-4 max-w-3xl min-h-screen flex flex-col">
+        <!-- Header -->
+        <header class="text-center my-8">
+            <h1 class="text-4xl sm:text-5xl font-extrabold text-blue-600">Từ điển AI Pro</h1>
+            <p class="text-gray-500 mt-2">Biến mỗi lần tra từ thành một buổi học</p>
+        </header>
+
+        <!-- Search Form -->
+        <main class="flex-grow">
+            <div class="bg-white p-4 sm:p-6 rounded-xl shadow-lg sticky top-4 z-10">
+                <div class="flex flex-col sm:flex-row gap-3">
+                    <input type="text" id="wordInput" placeholder="Tra từ 'create', 'beautiful'..." class="flex-grow w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
+                    <button id="lookupButton" class="w-full sm:w-auto flex items-center justify-center bg-blue-600 text-white font-semibold px-6 py-3 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 disabled:bg-blue-300 disabled:cursor-not-allowed">
+                        <svg id="searchIcon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        <div id="buttonSpinner" class="w-5 h-5 border-2 border-white border-t-transparent rounded-full spinner hidden mr-2"></div>
+                        <span id="buttonText">Tra cứu</span>
+                    </button>
+                </div>
+                 <p id="statusMessage" class="text-sm text-center mt-3 text-gray-500 h-5"></p>
+            </div>
+
+            <!-- Response Container -->
+            <div id="responseContainer" class="mt-6">
+                <!-- Placeholder -->
+                <div id="placeholder" class="text-center py-10 px-4">
+                     <svg class="mx-auto h-12 w-12 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+                    </svg>
+                    <h3 class="mt-2 text-lg font-medium text-gray-900">Khám phá thế giới từ vựng</h3>
+                    <p class="mt-1 text-sm text-gray-500">Kết quả tra cứu chi tiết sẽ xuất hiện ở đây.</p>
+                </div>
+                 <!-- Loading State -->
+                <div id="loadingState" class="hidden text-center py-10 px-4">
+                    <div class="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full spinner mx-auto"></div>
+                    <h3 class="mt-4 text-lg font-medium text-gray-900">Đang tổng hợp kiến thức...</h3>
+                    <p class="mt-1 text-sm text-gray-500">AI đang chuẩn bị một bài học nhỏ cho bạn.</p>
+                </div>
+                <!-- Result Display -->
+                <div id="resultView" class="hidden space-y-6"></div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="text-center py-6 text-sm text-gray-500">
+            <p>Phát triển dựa trên API của Google Gemini qua Firebase.</p>
+        </footer>
+    </div>
+
+    <script type="module">
+        // Using the original connection method as requested
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-app.js";
+        import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-ai.js";
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyAfBK2wYvEI4IliEBUnwLcZy4cMvsdmlvA",
+            authDomain: "aidic-f89e5.firebaseapp.com",
+            projectId: "aidic-f89e5",
+            storageBucket: "aidic-f89e5.firebasestorage.app",
+            messagingSenderId: "860586749960",
+            appId: "1:860586749960:web:b738b148aa59c6ebf821bd"
+        };
+
+        // DOM Elements
+        const wordInput = document.getElementById('wordInput');
+        const lookupButton = document.getElementById('lookupButton');
+        const buttonText = document.getElementById('buttonText');
+        const searchIcon = document.getElementById('searchIcon');
+        const buttonSpinner = document.getElementById('buttonSpinner');
+        const statusMessage = document.getElementById('statusMessage');
+        const responseContainer = document.getElementById('responseContainer');
+        const placeholder = document.getElementById('placeholder');
+        const loadingState = document.getElementById('loadingState');
+        const resultView = document.getElementById('resultView');
+
+        let model;
+
+        // --- AI and App Initialization ---
+        function initializeAI() {
+            try {
+                const app = initializeApp(firebaseConfig);
+                const ai = getAI(app, { backend: new GoogleAIBackend() });
+                model = getGenerativeModel(ai, { model: "gemini-1.5-flash-latest" });
+
+                lookupButton.addEventListener('click', lookupWord);
+                wordInput.addEventListener('keyup', (event) => {
+                    if (event.key === 'Enter') lookupWord();
+                });
+                updateStatus('Sẵn sàng nhận yêu cầu.');
+            } catch (e) {
+                console.error("LỖI KHỞI TẠO:", e);
+                placeholder.innerHTML = `<div class="bg-red-50 border-l-4 border-red-400 p-4 rounded-md text-left"><h3 class="font-bold text-red-800">Lỗi Khởi Tạo AI</h3><p class="text-red-700 mt-1">Không thể khởi tạo dịch vụ AI. Vui lòng kiểm tra lại cấu hình Firebase và đảm bảo API cần thiết đã được kích hoạt. Chi tiết lỗi đã được ghi lại trong Console (F12).</p></div>`;
+                updateStatus(`Lỗi khởi tạo: ${e.message}`, 'error');
+                lookupButton.disabled = true;
+            }
+        }
+
+        // --- UI State Management ---
+        const setUIState = (state) => {
+            lookupButton.disabled = state === 'loading';
+            buttonText.textContent = state === 'loading' ? 'Đang tra...' : 'Tra cứu';
+            searchIcon.classList.toggle('hidden', state === 'loading');
+            buttonSpinner.classList.toggle('hidden', state !== 'loading');
+            placeholder.classList.add('hidden');
+            loadingState.classList.toggle('hidden', state !== 'loading');
+            if(state !== 'loading') resultView.classList.remove('hidden');
+            else resultView.classList.add('hidden');
+        };
+
+        const updateStatus = (message, type = 'info') => {
+            statusMessage.textContent = message;
+            const colors = {
+                error: 'text-red-500',
+                success: 'text-green-600',
+                info: 'text-gray-500'
+            };
+            statusMessage.className = `text-sm text-center mt-3 h-5 ${colors[type]}`;
+        };
+
+        // --- Main API Call Function ---
+        async function lookupWord() {
+            const word = wordInput.value.trim();
+            if (!word) {
+                updateStatus('Vui lòng nhập một từ để tra cứu.', 'error');
+                return;
+            }
+            setUIState('loading');
+            resultView.innerHTML = '';
+
+            // The advanced system prompt to get structured learning data with multiple quiz types
+            const prompt = `
+                Bạn là một chuyên gia ngôn ngữ và giáo viên tiếng Anh. Với từ khóa "${word}", hãy trả về một đối tượng JSON duy nhất. Không thêm bất kỳ giải thích hay markdown nào bên ngoài đối tượng JSON.
+                Đối tượng JSON phải có cấu trúc:
+                {
+                  "word": "${word}",
+                  "phonetic": "/phiên âm/",
+                  "definitions": [ { "partOfSpeech": "loại từ", "meanings": [ { "definition": "...", "example": "..." } ] } ],
+                  "wordFamily": [ {"word": "...", "type": "..."} ],
+                  "synonyms": [ {"nuance": "...", "words": ["..."]} ],
+                  "antonyms": ["..."],
+                  "collocations": ["..."],
+                  "etymology": "...",
+                  "diverseExamples": [
+                      { "topic": "Chủ đề 1", "sentence": "Câu ví dụ 1", "translation": "Bản dịch tiếng Việt 1" },
+                      { "topic": "Chủ đề 2", "sentence": "Câu ví dụ 2", "translation": "Bản dịch tiếng Việt 2" }
+                  ],
+                  "interactiveQuizzes": [
+                    {
+                      "type": "multiple_choice",
+                      "question": "Câu hỏi trắc nghiệm về nghĩa của từ...",
+                      "options": ["đáp án 1", "đáp án 2", "đáp án đúng"],
+                      "answer": "đáp án đúng",
+                      "explanation": "Giải thích ngắn gọn bằng tiếng Việt."
+                    },
+                    {
+                      "type": "fill_in_the_blank",
+                      "question": "Câu có chỗ trống ___ để điền từ ${word}.",
+                      "answer": "${word}",
+                      "explanation": "Giải thích ngắn gọn bằng tiếng Việt."
+                    },
+                    {
+                      "type": "word_formation",
+                      "question": "Câu có chỗ trống và một từ gốc trong ngoặc (baseWord).",
+                      "answer": "Dạng đúng của từ",
+                      "explanation": "Giải thích ngắn gọn bằng tiếng Việt."
+                    }
+                  ]
+                }
+                Với "diverseExamples", hãy tạo ra 10 ví dụ đa dạng về chủ đề (khoa học, công nghệ, đời sống, kinh doanh, nghệ thuật...) và cấu trúc câu (đơn, phức, nghi vấn, phủ định). Mỗi ví dụ phải có bản dịch tiếng Việt.
+                Nếu một trường không có thông tin (ví dụ: antonyms), hãy trả về một mảng rỗng []. Nếu một đối tượng không có, hãy trả về null.
+            `;
+
+            try {
+                const result = await model.generateContent(prompt);
+                const response = result.response;
+                const responseText = response.text();
+                const cleanedText = responseText.replace(/^```json\s*|```\s*$/g, '');
+                const data = JSON.parse(cleanedText);
+                
+                console.log("Parsed AI Response:", data);
+                renderResult(data);
+                updateStatus('Đã tải xong!', 'success');
+            } catch (error) {
+                console.error("Lỗi khi tra cứu:", error);
+                updateStatus(`Đã xảy ra lỗi: ${error.message}`, 'error');
+                resultView.innerHTML = `<div class="bg-white p-6 rounded-xl shadow-lg text-center fade-in"><h3 class="text-xl font-semibold text-red-600">Rất tiếc, đã có lỗi xảy ra</h3><p class="text-gray-600 mt-2">Không thể phân tích phản hồi từ AI. Vui lòng thử lại. Chi tiết lỗi có trong console (F12).</p></div>`;
+            } finally {
+                setUIState('idle');
+            }
+        }
+
+        // --- Rendering Functions ---
+        function renderResult(data) {
+            resultView.innerHTML = `
+                ${renderMainCard(data)}
+                ${renderEtymology(data.etymology)}
+                ${renderWordFamily(data.wordFamily)}
+                ${renderSynonymsAntonyms(data.synonyms, data.antonyms)}
+                ${renderCollocations(data.collocations)}
+                ${renderDiverseExamples(data.diverseExamples)}
+                ${renderFlashcard(data)}
+                ${renderQuizzes(data.interactiveQuizzes)}
+            `;
+            // Add event listeners for interactive elements
+            addEventListeners(data);
+        }
+
+        function renderMainCard(data) {
+            return `
+            <div class="bg-white p-6 rounded-xl shadow-lg fade-in">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h2 class="text-4xl sm:text-5xl font-extrabold text-gray-900">${data.word}</h2>
+                        <p class="text-xl text-gray-500 mt-1">${data.phonetic || ''}</p>
+                    </div>
+                    <button id="audioButton" class="p-3 rounded-full hover:bg-blue-100 text-blue-600 transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"></path></svg>
+                    </button>
+                </div>
+                <div class="mt-6 space-y-5">
+                    ${(data.definitions || []).map(def => `
+                        <div>
+                            <h3 class="text-lg font-bold text-blue-600 uppercase tracking-wider">${def.partOfSpeech}</h3>
+                            <div class="mt-2 space-y-3">
+                                ${(def.meanings || []).map(meaning => `
+                                    <div class="pl-4 border-l-2 border-blue-200">
+                                        <p class="text-base text-gray-800">${meaning.definition}</p>
+                                        <p class="text-sm text-gray-500 italic mt-1">"${meaning.example || 'Không có ví dụ.'}"</p>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>`;
+        }
+        
+        function renderSection(title, content, icon) {
+            if (!content) return '';
+            return `
+            <div class="bg-white p-6 rounded-xl shadow-lg fade-in">
+                <div class="flex items-center">
+                    ${icon}
+                    <h3 class="text-2xl font-bold text-gray-800 ml-3">${title}</h3>
+                </div>
+                <div class="mt-4 text-gray-700 space-y-2">
+                    ${content}
+                </div>
+            </div>`;
+        }
+
+        function renderEtymology(etymology) {
+            if (!etymology) return '';
+            const icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
+            return renderSection('Nguồn gốc từ', `<p>${etymology}</p>`, icon);
+        }
+
+        function renderWordFamily(family) {
+            if (!family || family.length === 0) return '';
+            const icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656-.126-1.283-.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>`;
+            const content = `<div class="flex flex-wrap gap-2">${family.map(member => `<span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">${member.word} <span class="font-normal opacity-75">(${member.type})</span></span>`).join('')}</div>`;
+            return renderSection('Gia đình từ', content, icon);
+        }
+        
+        function renderSynonymsAntonyms(synonyms, antonyms) {
+            if ((!synonyms || synonyms.length === 0) && (!antonyms || antonyms.length === 0)) return '';
+            const icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>`;
+            let content = '';
+            if (synonyms && synonyms.length > 0) {
+                content += `<div><h4 class="font-semibold">Từ đồng nghĩa:</h4>${synonyms.map(group => `<div class="mt-1"><strong class="font-medium text-gray-600">${group.nuance}:</strong> <span class="text-gray-800">${group.words.join(', ')}</span></div>`).join('')}</div>`;
+            }
+            if (antonyms && antonyms.length > 0) {
+                content += `<div class="mt-3"><h4 class="font-semibold">Từ trái nghĩa:</h4><p>${antonyms.join(', ')}</p></div>`;
+            }
+            return renderSection('Đồng nghĩa & Trái nghĩa', content, icon);
+        }
+
+        function renderCollocations(collocations) {
+            if (!collocations || collocations.length === 0) return '';
+            const icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>`;
+            const content = `<div class="flex flex-wrap gap-2">${collocations.map(c => `<span class="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium">${c}</span>`).join('')}</div>`;
+            return renderSection('Cụm từ phổ biến', content, icon);
+        }
+
+        function renderDiverseExamples(examples) {
+            if (!examples || examples.length === 0) return '';
+            const icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v11.494m-9-5.747h18" /></svg>`;
+            const content = `<ol class="list-decimal list-inside space-y-4">${examples.map(ex => `
+                <li>
+                    <div class="flex items-center">
+                        <p class="flex-grow font-semibold text-gray-800">${ex.sentence}</p>
+                        <button class="play-example-btn p-1 rounded-full hover:bg-cyan-100 text-cyan-600 transition ml-2 flex-shrink-0" data-sentence="${ex.sentence}">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" /></svg>
+                        </button>
+                    </div>
+                    <p class="text-sm text-gray-500 italic mt-1 pl-2">→ ${ex.translation} <span class="text-xs font-medium bg-cyan-100 text-cyan-700 px-2 py-0.5 rounded-full ml-1">${ex.topic}</span></p>
+                </li>
+            `).join('')}</ol>`;
+            return renderSection('10 Ví dụ Mở rộng', content, icon);
+        }
+
+        function renderFlashcard(data) {
+            const definition = data.definitions?.[0]?.meanings?.[0]?.definition || "Không có định nghĩa.";
+            return `
+            <div class="fade-in">
+                <h3 class="text-2xl font-bold text-gray-800 ml-3 mb-4 text-center">Flashcard Ghi nhớ</h3>
+                <div id="flashcard" class="flashcard h-48 cursor-pointer group">
+                    <div class="flashcard-inner">
+                        <div class="flashcard-front bg-white shadow-lg flex-col p-4">
+                            <h4 class="text-4xl font-bold text-gray-800">${data.word}</h4>
+                            <p class="text-gray-400 mt-2">(Nhấn để lật)</p>
+                        </div>
+                        <div class="flashcard-back bg-blue-600 text-white flex-col text-center p-4">
+                            <p class="text-lg">${definition}</p>
+                            <p class="text-sm opacity-80 mt-2">${data.phonetic || ''}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        }
+        
+        function renderQuizzes(quizzes) {
+            if (!quizzes || quizzes.length === 0) return '';
+            const icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
+            const content = quizzes.map((quiz, index) => {
+                if (!quiz) return ''; 
+                switch(quiz.type) {
+                    case 'multiple_choice':
+                        return renderMultipleChoiceQuiz(quiz, index);
+                    case 'fill_in_the_blank':
+                        return renderFillInTheBlankQuiz(quiz, index);
+                    case 'word_formation':
+                        return renderWordFormationQuiz(quiz, index);
+                    default:
+                        return '';
+                }
+            }).join('');
+            return renderSection('Kiểm tra nhanh', content, icon);
+        }
+
+        function renderMultipleChoiceQuiz(quiz, index) {
+            return `
+            <div class="quiz-container p-4 border-t border-gray-200" data-quiz-index="${index}">
+                <p class="font-semibold mb-3">${index + 1}. ${quiz.question}</p>
+                <div class="quiz-options space-y-2">
+                    ${(quiz.options || []).map(opt => `<button data-option="${opt}" class="quiz-option w-full text-left p-3 bg-gray-100 hover:bg-blue-100 rounded-lg transition">${opt}</button>`).join('')}
+                </div>
+                <div class="quiz-feedback mt-3 h-auto text-sm"></div>
+            </div>`;
+        }
+
+        function renderFillInTheBlankQuiz(quiz, index) {
+            return `
+            <div class="quiz-container p-4 border-t border-gray-200" data-quiz-index="${index}">
+                <p class="font-semibold mb-3">${index + 1}. ${quiz.question}</p>
+                <div class="flex gap-2">
+                    <input type="text" class="quiz-input flex-grow p-2 border border-gray-300 rounded-md" placeholder="Nhập đáp án...">
+                    <button class="check-answer-btn px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">Kiểm tra</button>
+                </div>
+                <div class="quiz-feedback mt-3 h-auto text-sm"></div>
+            </div>`;
+        }
+        
+        function renderWordFormationQuiz(quiz, index) {
+            return renderFillInTheBlankQuiz(quiz, index); // Same structure
+        }
+
+
+        // --- Event Listener Setup ---
+        function addEventListeners(data) {
+            // Audio button
+            document.getElementById('audioButton')?.addEventListener('click', () => {
+                const utterance = new SpeechSynthesisUtterance(data.word);
+                utterance.lang = 'en-US';
+                window.speechSynthesis.speak(utterance);
+            });
+
+            // Flashcard flip
+            document.getElementById('flashcard')?.addEventListener('click', (e) => {
+                e.currentTarget.classList.toggle('is-flipped');
+            });
+            
+            resultView.addEventListener('click', (e) => {
+                const playExampleBtn = e.target.closest('.play-example-btn');
+                if (playExampleBtn) {
+                    const sentence = playExampleBtn.dataset.sentence;
+                    const utterance = new SpeechSynthesisUtterance(sentence);
+                    utterance.lang = 'en-US';
+                    window.speechSynthesis.speak(utterance);
+                    return;
+                }
+
+                const quizContainer = e.target.closest('.quiz-container');
+                if (!quizContainer) return;
+
+                const index = parseInt(quizContainer.dataset.quizIndex);
+                const quiz = data.interactiveQuizzes[index];
+                if (!quiz) return;
+                const feedbackEl = quizContainer.querySelector('.quiz-feedback');
+                
+                let userAnswer;
+                let isCorrect = false;
+
+                if (e.target.classList.contains('quiz-option')) {
+                    userAnswer = e.target.dataset.option;
+                    isCorrect = userAnswer === quiz.answer;
+                    
+                    quizContainer.querySelectorAll('.quiz-option').forEach(btn => {
+                        btn.disabled = true;
+                        if (btn.dataset.option === quiz.answer) {
+                            btn.classList.add('!bg-green-200', 'text-green-900', 'font-semibold');
+                        } else if (btn === e.target && !isCorrect) {
+                            btn.classList.add('!bg-red-200', 'text-red-900');
+                        }
+                    });
+                     showFeedback(feedbackEl, isCorrect, quiz.explanation);
+                }
+
+                if (e.target.classList.contains('check-answer-btn')) {
+                    const inputEl = quizContainer.querySelector('.quiz-input');
+                    userAnswer = inputEl.value.trim();
+                    isCorrect = userAnswer.toLowerCase() === quiz.answer.toLowerCase();
+                    
+                    inputEl.disabled = true;
+                    e.target.disabled = true;
+                    if (isCorrect) {
+                        inputEl.classList.add('border-green-500', 'bg-green-50');
+                    } else {
+                        inputEl.classList.add('border-red-500', 'bg-red-50');
+                    }
+                    showFeedback(feedbackEl, isCorrect, `Đáp án đúng là <b>${quiz.answer}</b>. ${quiz.explanation}`);
+                }
+            });
+        }
+        
+        function showFeedback(element, isCorrect, text) {
+             element.innerHTML = `
+                <div class="p-3 rounded-md ${isCorrect ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                    <b>${isCorrect ? 'Chính xác!' : 'Chưa đúng.'}</b> ${text || ''}
+                </div>`;
+        }
+
+        // Start the application
+        initializeAI();
+    </script>
+</body>
+</html>
