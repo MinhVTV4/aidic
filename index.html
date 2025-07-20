@@ -195,17 +195,27 @@
 
             // The advanced system prompt to get structured learning data with multiple quiz types
             const prompt = `
-                Bạn là một chuyên gia ngôn ngữ và giáo viên tiếng Anh. Với từ khóa "${word}", hãy trả về một đối tượng JSON duy nhất. Không thêm bất kỳ giải thích hay markdown nào bên ngoài đối tượng JSON.
+                Bạn là một chuyên gia ngôn ngữ và giáo viên tiếng Anh cho người Việt. Với từ khóa "${word}", hãy trả về một đối tượng JSON duy nhất. Mọi giải thích phải bằng tiếng Việt, thật chi tiết, rõ ràng và dễ hiểu.
                 Đối tượng JSON phải có cấu trúc:
                 {
                   "word": "${word}",
                   "phonetic": "/phiên âm/",
-                  "definitions": [ { "partOfSpeech": "loại từ", "meanings": [ { "definition": "...", "example": "..." } ] } ],
+                  "definitions": [
+                    {
+                      "partOfSpeech": "loại từ",
+                      "meanings": [
+                        {
+                          "definition": "Giải thích nghĩa bằng tiếng Việt thật chi tiết, bao gồm các sắc thái và cách dùng trong các ngữ cảnh khác nhau.",
+                          "example": "Câu ví dụ tiếng Anh."
+                        }
+                      ]
+                    }
+                  ],
                   "wordFamily": [ {"word": "...", "type": "..."} ],
-                  "synonyms": [ {"nuance": "...", "words": ["..."]} ],
+                  "synonyms": [ {"nuance": "Sắc thái nghĩa bằng tiếng Việt", "words": ["..."]} ],
                   "antonyms": ["..."],
                   "collocations": ["..."],
-                  "etymology": "...",
+                  "etymology": "Giải thích chi tiết và thú vị về nguồn gốc, lịch sử của từ bằng tiếng Việt.",
                   "diverseExamples": [
                       { "topic": "Chủ đề 1", "sentence": "Câu ví dụ 1", "translation": "Bản dịch tiếng Việt 1" },
                       { "topic": "Chủ đề 2", "sentence": "Câu ví dụ 2", "translation": "Bản dịch tiếng Việt 2" }
@@ -216,24 +226,24 @@
                       "question": "Câu hỏi trắc nghiệm về nghĩa của từ...",
                       "options": ["đáp án 1", "đáp án 2", "đáp án đúng"],
                       "answer": "đáp án đúng",
-                      "explanation": "Giải thích ngắn gọn bằng tiếng Việt."
+                      "explanation": "Giải thích chi tiết bằng tiếng Việt tại sao đây là đáp án đúng và tại sao các đáp án khác sai."
                     },
                     {
                       "type": "fill_in_the_blank",
                       "question": "Câu có chỗ trống ___ để điền từ ${word}.",
                       "answer": "${word}",
-                      "explanation": "Giải thích ngắn gọn bằng tiếng Việt."
+                      "explanation": "Giải thích chi tiết bằng tiếng Việt về ngữ cảnh và tại sao từ này phù hợp."
                     },
                     {
                       "type": "word_formation",
                       "question": "Câu có chỗ trống và một từ gốc trong ngoặc (baseWord).",
                       "answer": "Dạng đúng của từ",
-                      "explanation": "Giải thích ngắn gọn bằng tiếng Việt."
+                      "explanation": "Giải thích chi tiết bằng tiếng Việt về quy tắc cấu tạo từ và tại sao dạng từ này là đúng."
                     }
                   ]
                 }
-                Với "diverseExamples", hãy tạo ra 10 ví dụ đa dạng về chủ đề (khoa học, công nghệ, đời sống, kinh doanh, nghệ thuật...) và cấu trúc câu (đơn, phức, nghi vấn, phủ định). Mỗi ví dụ phải có bản dịch tiếng Việt.
-                Nếu một trường không có thông tin (ví dụ: antonyms), hãy trả về một mảng rỗng []. Nếu một đối tượng không có, hãy trả về null.
+                Với "diverseExamples", hãy tạo ra 10 ví dụ đa dạng về chủ đề và cấu trúc câu. Mỗi ví dụ phải có bản dịch tiếng Việt.
+                Nếu một trường không có thông tin (ví dụ: antonyms), hãy trả về một mảng rỗng [].
             `;
 
             try {
