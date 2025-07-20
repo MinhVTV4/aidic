@@ -64,7 +64,7 @@
 </head>
 <body class="text-gray-800">
 
-    <div class="container mx-auto p-4 max-w-3xl min-h-screen flex flex-col">
+    <div class="container mx-auto p-4 max-w-2xl min-h-screen flex flex-col">
         <!-- Header -->
         <header class="text-center my-8">
             <h1 class="text-4xl sm:text-5xl font-extrabold text-blue-600">Từ điển AI Pro</h1>
@@ -73,16 +73,16 @@
 
         <!-- Search Form -->
         <main class="flex-grow">
-            <div class="bg-white p-4 sm:p-6 rounded-xl shadow-lg sticky top-4 z-10">
-                <div class="flex flex-col sm:flex-row gap-3">
-                    <input type="text" id="wordInput" placeholder="Tra từ 'create', 'beautiful'..." class="flex-grow w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
-                    <button id="lookupButton" class="w-full sm:w-auto flex items-center justify-center bg-blue-600 text-white font-semibold px-6 py-3 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 disabled:bg-blue-300 disabled:cursor-not-allowed">
+            <div class="bg-white/70 backdrop-blur-lg p-3 rounded-xl shadow-lg sticky top-4 z-10 transition-all duration-300 focus-within:shadow-2xl">
+                <div class="flex flex-col sm:flex-row gap-2">
+                    <input type="text" id="wordInput" placeholder="Tra từ 'success', 'versatile'..." class="flex-grow w-full px-4 py-2 bg-white/50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow duration-300 focus:shadow-md">
+                    <button id="lookupButton" class="w-full sm:w-auto flex items-center justify-center bg-blue-600 text-white font-semibold px-6 py-2 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 disabled:bg-blue-300 disabled:cursor-not-allowed transform hover:scale-105">
                         <svg id="searchIcon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                         <div id="buttonSpinner" class="w-5 h-5 border-2 border-white border-t-transparent rounded-full spinner hidden mr-2"></div>
                         <span id="buttonText">Tra cứu</span>
                     </button>
                 </div>
-                 <p id="statusMessage" class="text-sm text-center mt-3 text-gray-500 h-5"></p>
+                 <p id="statusMessage" class="text-sm text-center mt-2 text-gray-500 h-5"></p>
             </div>
 
             <!-- Response Container -->
@@ -180,7 +180,7 @@
                 success: 'text-green-600',
                 info: 'text-gray-500'
             };
-            statusMessage.className = `text-sm text-center mt-3 h-5 ${colors[type]}`;
+            statusMessage.className = `text-sm text-center mt-2 h-5 ${colors[type]}`;
         };
 
         // --- Main API Call Function ---
@@ -255,7 +255,7 @@
                 
                 console.log("Parsed AI Response:", data);
                 renderResult(data);
-                updateStatus('Đã tải xong!', 'success');
+                updateStatus('', 'info'); // Clear status on success
             } catch (error) {
                 console.error("Lỗi khi tra cứu:", error);
                 updateStatus(`Đã xảy ra lỗi: ${error.message}`, 'error');
@@ -334,7 +334,11 @@
         function renderWordFamily(family) {
             if (!family || family.length === 0) return '';
             const icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656-.126-1.283-.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>`;
-            const content = `<div class="flex flex-wrap gap-2">${family.map(member => `<span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">${member.word} <span class="font-normal opacity-75">(${member.type})</span></span>`).join('')}</div>`;
+            const content = `<div class="flex flex-wrap gap-2">${family.map(member => `
+                <button data-word="${member.word}" class="word-family-link bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium hover:bg-green-200 hover:text-green-900 focus:outline-none focus:ring-2 focus:ring-green-400 transition">
+                    ${member.word} <span class="font-normal opacity-75">(${member.type})</span>
+                </button>
+            `).join('')}</div>`;
             return renderSection('Gia đình từ', content, icon);
         }
         
@@ -463,6 +467,17 @@
                     const utterance = new SpeechSynthesisUtterance(sentence);
                     utterance.lang = 'en-US';
                     window.speechSynthesis.speak(utterance);
+                    return;
+                }
+
+                const wordFamilyLink = e.target.closest('.word-family-link');
+                if (wordFamilyLink) {
+                    const wordToSearch = wordFamilyLink.dataset.word;
+                    if (wordToSearch) {
+                        wordInput.value = wordToSearch;
+                        lookupWord();
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
                     return;
                 }
 
