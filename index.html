@@ -172,6 +172,10 @@
                 <div id="user-info" class="hidden items-center gap-3 justify-end">
                     <span id="user-name" class="font-semibold text-slate-700"></span>
                     <img id="user-avatar" class="w-10 h-10 rounded-full shadow" src="" alt="User Avatar">
+                    <!-- **NEW: Dashboard Button** -->
+                    <button id="dashboard-btn" title="Góc học tập" class="p-2 rounded-full hover:bg-slate-200 text-slate-600 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                    </button>
                     <button id="logout-btn" class="text-sm text-slate-500 hover:text-blue-600">Đăng xuất</button>
                 </div>
             </div>
@@ -233,6 +237,40 @@
             </div>
         </div>
     </div>
+    
+    <!-- **NEW: Dashboard Modal** -->
+    <div id="dashboard-modal" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden">
+        <div id="dashboard-content" class="bg-white rounded-xl shadow-2xl w-full max-w-2xl transform transition-all opacity-0 -translate-y-4">
+            <div class="p-6">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-2xl font-bold text-slate-900">Góc học tập</h3>
+                    <button id="dashboard-close-btn" class="p-1 rounded-full hover:bg-slate-200 text-slate-500">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+                <div class="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+                    <div class="bg-blue-50 p-4 rounded-lg">
+                        <p class="text-sm text-blue-800 font-semibold">Từ đã lưu</p>
+                        <p id="stats-favorites" class="text-3xl font-bold text-blue-600">0</p>
+                    </div>
+                    <div class="bg-green-50 p-4 rounded-lg">
+                        <p class="text-sm text-green-800 font-semibold">Từ đã tra</p>
+                        <p id="stats-history" class="text-3xl font-bold text-green-600">0</p>
+                    </div>
+                    <div class="bg-amber-50 p-4 rounded-lg">
+                        <p class="text-sm text-amber-800 font-semibold">Chuỗi ngày học</p>
+                        <p id="stats-streak" class="text-3xl font-bold text-amber-500">0</p>
+                    </div>
+                </div>
+                <div class="mt-8">
+                    <h4 class="text-lg font-bold text-slate-800 mb-4">Hoạt động 7 ngày qua</h4>
+                    <div id="stats-chart" class="bg-slate-50 p-4 rounded-lg h-48 flex items-end justify-around">
+                        <!-- Chart bars will be injected here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
 
     <script type="module">
@@ -240,7 +278,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-app.js";
         import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-ai.js";
         import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, onSnapshot, query, orderBy, where, Timestamp, getDocs } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-firestore.js";
 
         // Cấu hình Firebase (giữ nguyên)
         const firebaseConfig = {
@@ -295,6 +333,16 @@
         const quickLookupCloseBtn = document.getElementById('quick-lookup-close-btn');
         const quickLookupFullSearchBtn = document.getElementById('quick-lookup-full-search-btn');
 
+        // **NEW: Dashboard Elements**
+        const dashboardBtn = document.getElementById('dashboard-btn');
+        const dashboardModal = document.getElementById('dashboard-modal');
+        const dashboardContent = document.getElementById('dashboard-content');
+        const dashboardCloseBtn = document.getElementById('dashboard-close-btn');
+        const statsFavoritesEl = document.getElementById('stats-favorites');
+        const statsHistoryEl = document.getElementById('stats-history');
+        const statsStreakEl = document.getElementById('stats-streak');
+        const statsChartEl = document.getElementById('stats-chart');
+
 
         // --- Chức năng chính ---
 
@@ -303,7 +351,6 @@
             try {
                 app = initializeApp(firebaseConfig);
                 ai = getAI(app, { backend: new GoogleAIBackend() });
-                // **FIX: Corrected model name to a valid one**
                 model = getGenerativeModel(ai, { model: "gemini-2.5-flash" });
                 auth = getAuth(app);
                 db = getFirestore(app);
@@ -347,6 +394,13 @@
             quickLookupModal.addEventListener('click', (e) => {
                 if (e.target === quickLookupModal) hideQuickLookupModal();
             });
+            
+            // **NEW: Dashboard Listeners**
+            dashboardBtn.addEventListener('click', showDashboard);
+            dashboardCloseBtn.addEventListener('click', hideDashboard);
+            dashboardModal.addEventListener('click', (e) => {
+                if (e.target === dashboardModal) hideDashboard();
+            });
         }
         
         // --- Modal Functions ---
@@ -378,6 +432,22 @@
             quickLookupContent.classList.add('opacity-0', '-translate-y-4');
             setTimeout(() => {
                 quickLookupModal.classList.add('hidden');
+            }, 200);
+        }
+        
+        // **NEW: Dashboard Modal Functions**
+        function showDashboard() {
+            dashboardModal.classList.remove('hidden');
+            setTimeout(() => {
+                dashboardContent.classList.remove('opacity-0', '-translate-y-4');
+            }, 10);
+            loadDashboardData();
+        }
+
+        function hideDashboard() {
+            dashboardContent.classList.add('opacity-0', '-translate-y-4');
+            setTimeout(() => {
+                dashboardModal.classList.add('hidden');
             }, 200);
         }
 
@@ -486,7 +556,7 @@
 
         // --- Các hàm tương tác với Firestore ---
         function subscribeToUserData(userId) {
-            const favsQuery = query(collection(db, 'users', userId, 'favorites'), orderBy('word'));
+            const favsQuery = query(collection(db, 'users', userId, 'favorites'));
             onSnapshot(favsQuery, (snapshot) => {
                 userFavorites.clear();
                 const favWords = [];
@@ -494,28 +564,33 @@
                     userFavorites.add(doc.id);
                     favWords.push({ id: doc.id, ...doc.data() });
                 });
+                statsFavoritesEl.textContent = favWords.length;
+                favWords.sort((a, b) => a.word.localeCompare(b.word));
                 renderWordList(favoritesListDiv, favWords, 'favorites', 'Chưa có từ nào trong sổ tay.');
             });
 
-            const historyQuery = query(collection(db, 'users', userId, 'history'), orderBy('timestamp', 'desc'));
+            const historyQuery = query(collection(db, 'users', userId, 'history'));
             onSnapshot(historyQuery, (snapshot) => {
                 const historyWords = [];
                 snapshot.forEach(doc => {
                     historyWords.push({ id: doc.id, ...doc.data() });
                 });
+                statsHistoryEl.textContent = historyWords.length;
+                historyWords.sort((a, b) => b.timestamp - a.timestamp);
                 renderWordList(historyListDiv, historyWords, 'history', 'Chưa có từ nào trong lịch sử.');
             });
         }
         
         async function saveToHistory(wordData) {
             if (!currentUser) return;
+            await updateUserStats(); // **NEW: Update streak on every lookup**
             const historyRef = doc(db, 'users', currentUser.uid, 'history', wordData.word.toLowerCase());
             try {
                 await setDoc(historyRef, {
                     word: wordData.word,
                     phonetic: wordData.phonetic || '',
                     definition: wordData.definitions?.[0]?.meanings?.[0]?.definition || '',
-                    timestamp: new Date()
+                    timestamp: Timestamp.now()
                 }, { merge: true });
             } catch (error) {
                 console.error("Lỗi lưu lịch sử:", error);
@@ -538,7 +613,7 @@
                         word: wordData.word,
                         phonetic: wordData.phonetic || '',
                         definition: wordData.definitions?.[0]?.meanings?.[0]?.definition || '',
-                        timestamp: new Date()
+                        timestamp: Timestamp.now()
                     });
                     starButton.classList.add('pop-animation');
                     starButton.addEventListener('animationend', () => starButton.classList.remove('pop-animation'), { once: true });
@@ -591,7 +666,6 @@
                 const result = await model.generateContent(prompt);
                 const response = result.response;
                 const responseText = response.text();
-                // **FIX: More robust JSON extraction**
                 const jsonMatch = responseText.match(/\{[\s\S]*\}/);
                 if (!jsonMatch) {
                     throw new Error("Không tìm thấy đối tượng JSON hợp lệ trong phản hồi.");
@@ -631,7 +705,6 @@
 
                 renderQuickLookupContent(data);
 
-                // Setup the full search button
                 quickLookupFullSearchBtn.onclick = () => {
                     hideQuickLookupModal();
                     wordInput.value = word;
