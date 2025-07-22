@@ -18,6 +18,22 @@
             font-family: 'Inter', sans-serif;
             background-color: #f3f4f6;
         }
+        /* Custom scrollbar for the sidebar on larger screens */
+        @media (min-width: 1024px) {
+            .sidebar-scroll::-webkit-scrollbar {
+                width: 6px;
+            }
+            .sidebar-scroll::-webkit-scrollbar-track {
+                background: transparent;
+            }
+            .sidebar-scroll::-webkit-scrollbar-thumb {
+                background: #d1d5db;
+                border-radius: 3px;
+            }
+            .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+                background: #9ca3af;
+            }
+        }
         /* Spinner animation */
         .spinner {
             animation: spin 1s linear infinite;
@@ -72,35 +88,79 @@
 </head>
 <body class="text-gray-800">
 
-    <div class="container mx-auto p-4 max-w-2xl min-h-screen flex flex-col">
-        <!-- Auth Section -->
-        <div id="auth-container" class="absolute top-4 right-4 text-right">
-            <button id="login-btn" class="bg-white text-gray-700 font-semibold px-4 py-2 rounded-lg shadow hover:bg-gray-100 transition">Đăng nhập với Google</button>
-            <div id="user-info" class="hidden items-center gap-3">
-                <span id="user-name" class="font-semibold text-gray-700"></span>
-                <img id="user-avatar" class="w-10 h-10 rounded-full" src="" alt="User Avatar">
-                <button id="logout-btn" class="text-sm text-gray-500 hover:text-blue-600">Đăng xuất</button>
-            </div>
-        </div>
+    <div class="max-w-screen-xl mx-auto lg:grid lg:grid-cols-12 lg:gap-8">
+        <!-- Left Sidebar -->
+        <aside class="lg:col-span-4 xl:col-span-3 p-4 lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto lg:py-8 lg:pr-4 sidebar-scroll">
+            <div class="flex flex-col h-full">
+                <!-- Header -->
+                <header class="text-center my-8">
+                    <h1 class="text-4xl sm:text-5xl font-extrabold text-blue-600">Từ điển AI Pro</h1>
+                    <p class="text-gray-500 mt-2">Biến mỗi lần tra từ thành một buổi học</p>
+                </header>
 
-        <!-- Header -->
-        <header class="text-center my-8 mt-20">
-            <h1 class="text-4xl sm:text-5xl font-extrabold text-blue-600">Từ điển AI Pro</h1>
-            <p class="text-gray-500 mt-2">Biến mỗi lần tra từ thành một buổi học</p>
-        </header>
-
-        <!-- Search Form -->
-        <main class="flex-grow">
-            <div class="bg-white/70 backdrop-blur-lg p-3 rounded-xl shadow-lg sticky top-4 z-10 transition-all duration-300 focus-within:shadow-2xl">
-                <div class="flex flex-col sm:flex-row gap-2">
-                    <input type="text" id="wordInput" placeholder="Tra từ 'success', 'versatile'..." class="flex-grow w-full px-4 py-2 bg-white/50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow duration-300 focus:shadow-md">
-                    <button id="lookupButton" class="w-full sm:w-auto flex items-center justify-center bg-blue-600 text-white font-semibold px-6 py-2 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 disabled:bg-blue-300 disabled:cursor-not-allowed transform hover:scale-105">
-                        <svg id="searchIcon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                        <div id="buttonSpinner" class="w-5 h-5 border-2 border-white border-t-transparent rounded-full spinner hidden mr-2"></div>
-                        <span id="buttonText">Tra cứu</span>
-                    </button>
+                <!-- Search Form -->
+                <div class="bg-white/70 backdrop-blur-lg p-3 rounded-xl shadow-lg sticky top-4 lg:static z-10 transition-all duration-300 focus-within:shadow-2xl">
+                    <div class="flex flex-col sm:flex-row lg:flex-col gap-2">
+                        <input type="text" id="wordInput" placeholder="Tra từ 'success', 'versatile'..." class="flex-grow w-full px-4 py-2 bg-white/50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow duration-300 focus:shadow-md">
+                        <button id="lookupButton" class="w-full sm:w-auto lg:w-full flex items-center justify-center bg-blue-600 text-white font-semibold px-6 py-2 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 disabled:bg-blue-300 disabled:cursor-not-allowed transform hover:scale-105">
+                            <svg id="searchIcon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                            <div id="buttonSpinner" class="w-5 h-5 border-2 border-white border-t-transparent rounded-full spinner hidden mr-2"></div>
+                            <span id="buttonText">Tra cứu</span>
+                        </button>
+                    </div>
+                     <p id="statusMessage" class="text-sm text-center mt-2 text-gray-500 h-5"></p>
                 </div>
-                 <p id="statusMessage" class="text-sm text-center mt-2 text-gray-500 h-5"></p>
+
+                <!-- User Data Section (History & Favorites) -->
+                <div id="user-data-section" class="hidden mt-10 space-y-8 flex-grow">
+                    <!-- History -->
+                    <div>
+                        <h3 class="text-2xl font-bold text-gray-800 mb-4">Lịch sử tra cứu</h3>
+                        <div class="bg-white p-4 rounded-xl shadow-md">
+                            <div class="relative mb-4">
+                                <input type="text" id="history-search" class="w-full p-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Tìm trong lịch sử...">
+                                <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd" /></svg>
+                            </div>
+                            <div id="history-list" class="space-y-2 max-h-60 overflow-y-auto">
+                                <p class="text-gray-500">Chưa có từ nào trong lịch sử.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Favorites -->
+                    <div>
+                        <h3 class="text-2xl font-bold text-gray-800 mb-4">Sổ tay từ vựng</h3>
+                        <div class="bg-white p-4 rounded-xl shadow-md">
+                            <div class="relative mb-4">
+                                <input type="text" id="favorites-search" class="w-full p-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Tìm trong sổ tay...">
+                                 <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd" /></svg>
+                            </div>
+                            <div id="favorites-list" class="space-y-2 max-h-60 overflow-y-auto">
+                                 <p class="text-gray-500">Chưa có từ nào trong sổ tay.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <footer class="text-center py-6 text-sm text-gray-500 mt-auto">
+                    <p>Phát triển dựa trên API của Google Gemini qua Firebase.</p>
+                </footer>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="lg:col-span-8 xl:col-span-9 p-4 lg:py-8 lg:pl-4">
+            <!-- Auth Section -->
+            <div id="auth-container" class="text-right mb-8">
+                <button id="login-btn" class="bg-white text-gray-700 font-semibold px-4 py-2 rounded-lg shadow hover:bg-gray-100 transition inline-flex items-center">
+                    <svg class="w-5 h-5 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"/><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"/><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"/><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.574l6.19,5.238C39.902,35.619,44,29.592,44,24C44,22.659,43.862,21.35,43.611,20.083z"/></svg>
+                    Đăng nhập với Google
+                </button>
+                <div id="user-info" class="hidden items-center gap-3 justify-end">
+                    <span id="user-name" class="font-semibold text-gray-700"></span>
+                    <img id="user-avatar" class="w-10 h-10 rounded-full" src="" alt="User Avatar">
+                    <button id="logout-btn" class="text-sm text-gray-500 hover:text-blue-600">Đăng xuất</button>
+                </div>
             </div>
 
             <!-- Response Container -->
@@ -123,42 +183,7 @@
                 <!-- Result Display -->
                 <div id="resultView" class="hidden space-y-6"></div>
             </div>
-
-            <!-- User Data Section (History & Favorites) -->
-            <div id="user-data-section" class="hidden mt-10 space-y-8">
-                <!-- History -->
-                <div>
-                    <h3 class="text-2xl font-bold text-gray-800 mb-4">Lịch sử tra cứu</h3>
-                    <div class="bg-white p-4 rounded-xl shadow-md">
-                        <div class="relative mb-4">
-                            <input type="text" id="history-search" class="w-full p-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Tìm trong lịch sử...">
-                            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd" /></svg>
-                        </div>
-                        <div id="history-list" class="space-y-2 max-h-96 overflow-y-auto">
-                            <p class="text-gray-500">Chưa có từ nào trong lịch sử.</p>
-                        </div>
-                    </div>
-                </div>
-                <!-- Favorites -->
-                <div>
-                    <h3 class="text-2xl font-bold text-gray-800 mb-4">Sổ tay từ vựng</h3>
-                    <div class="bg-white p-4 rounded-xl shadow-md">
-                        <div class="relative mb-4">
-                            <input type="text" id="favorites-search" class="w-full p-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Tìm trong sổ tay...">
-                             <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd" /></svg>
-                        </div>
-                        <div id="favorites-list" class="space-y-2 max-h-96 overflow-y-auto">
-                             <p class="text-gray-500">Chưa có từ nào trong sổ tay.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
         </main>
-
-        <!-- Footer -->
-        <footer class="text-center py-6 text-sm text-gray-500">
-            <p>Phát triển dựa trên API của Google Gemini qua Firebase.</p>
-        </footer>
     </div>
 
     <script type="module">
@@ -238,7 +263,6 @@
             loginBtn.addEventListener('click', signIn);
             logoutBtn.addEventListener('click', logOut);
             
-            // **MỚI: Event listener cho các ô tìm kiếm**
             historySearchInput.addEventListener('input', (e) => filterWordList(historyListDiv, e.target.value));
             favoritesSearchInput.addEventListener('input', (e) => filterWordList(favoritesListDiv, e.target.value));
         }
@@ -292,7 +316,7 @@
         const updateStatus = (message, type = 'info') => {
             statusMessage.textContent = message;
             const colors = { error: 'text-red-500', success: 'text-green-600', info: 'text-gray-500' };
-            statusMessage.className = `text-sm text-center mt-2 h-5 ${colors[type]}`;
+            statusMessage.className = `text-sm text-center mt-2 text-gray-500 h-5`;
         };
 
         // --- Các hàm xác thực (Authentication) ---
@@ -358,7 +382,6 @@
                 return;
             }
             const favRef = doc(db, 'users', currentUser.uid, 'favorites', wordData.word.toLowerCase());
-            const starButton = document.getElementById('favorite-btn');
             try {
                 if (userFavorites.has(wordData.word.toLowerCase())) {
                     await deleteDoc(favRef);
@@ -378,7 +401,6 @@
             }
         }
 
-        // **MỚI: Hàm xóa một từ khỏi danh sách**
         async function deleteWordFromList(word, listType) {
             if (!currentUser) return;
             const docRef = doc(db, 'users', currentUser.uid, listType, word.toLowerCase());
@@ -391,7 +413,6 @@
             }
         }
 
-        // **MỚI: Hàm lọc danh sách từ**
         function filterWordList(listContainer, searchTerm) {
             const items = listContainer.querySelectorAll('.word-list-item');
             const normalizedSearchTerm = searchTerm.toLowerCase();
@@ -492,7 +513,6 @@
             </div>`;
         }
         
-        // **CẬP NHẬT: Thêm nút xóa vào danh sách**
         function renderWordList(container, words, listType, emptyMessage) {
             if (words.length === 0) {
                 container.innerHTML = `<p class="text-gray-500">${emptyMessage}</p>`;
