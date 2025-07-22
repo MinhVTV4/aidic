@@ -234,6 +234,7 @@
         let currentUser = null;
         let userFavorites = new Set();
         let confirmCallback = null;
+        let englishVoice = null; // **NEW: Variable to hold the selected English voice**
 
         // --- DOM Elements ---
         const wordInput = document.getElementById('wordInput');
@@ -277,6 +278,7 @@
 
                 setupEventListeners();
                 setupAuthObserver();
+                loadAndSetEnglishVoice(); // **NEW: Load voices on startup**
                 updateStatus('Sẵn sàng nhận yêu cầu.');
             } catch (e) {
                 console.error("LỖI KHỞI TẠO:", e);
@@ -402,6 +404,45 @@
                 console.error("Lỗi đăng xuất:", error);
             }
         }
+        
+        // **NEW: Functions for Speech Synthesis**
+        function loadAndSetEnglishVoice() {
+            // This event fires when the voice list has been loaded.
+            speechSynthesis.onvoiceschanged = () => {
+                const voices = speechSynthesis.getVoices();
+                // Find a suitable English voice. Prioritize Google's, then Microsoft's, then any other.
+                englishVoice = voices.find(voice => voice.name === 'Google US English') 
+                            || voices.find(voice => voice.name === 'Microsoft David - English (United States)')
+                            || voices.find(voice => voice.lang === 'en-US')
+                            || voices.find(voice => voice.lang === 'en-GB')
+                            || voices.find(voice => voice.lang.startsWith('en-'));
+                
+                console.log("Selected English voice:", englishVoice ? englishVoice.name : "None found");
+            };
+            // In some browsers, the event isn't fired on page load, so we trigger it manually.
+            if (speechSynthesis.getVoices().length > 0) {
+                speechSynthesis.onvoiceschanged();
+            }
+        }
+
+        function speakText(text) {
+            if (!text || typeof text !== 'string') return;
+            // Cancel any previous speech
+            speechSynthesis.cancel();
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            
+            if (englishVoice) {
+                utterance.voice = englishVoice;
+            } else {
+                // As a fallback, set the language. Might not always work if no voice pack is installed.
+                utterance.lang = 'en-US';
+                console.warn("English voice not found, using browser default for 'en-US'.");
+            }
+            
+            window.speechSynthesis.speak(utterance);
+        }
+
 
         // --- Các hàm tương tác với Firestore ---
         function subscribeToUserData(userId) {
@@ -504,7 +545,6 @@
             setUIState('loading');
             resultView.innerHTML = '';
 
-            // **MODIFIED: Removed interactiveQuizzes from initial prompt**
             const prompt = `Bạn là một chuyên gia ngôn ngữ và giáo viên tiếng Anh cho người Việt. Với từ khóa "${word}", hãy trả về một đối tượng JSON duy nhất chứa các thông tin CỐT LÕI. Mọi giải thích phải bằng tiếng Việt, thật chi tiết, rõ ràng và dễ hiểu. Sử dụng Markdown đơn giản (in đậm, in nghiêng, gạch đầu dòng) để định dạng các phần giải thích cho dễ đọc. KHÔNG BAO GỒM "synonyms", "antonyms", "collocations", "interactiveQuizzes" trong lần gọi đầu tiên này. Đối tượng JSON phải có cấu trúc: { "word": "${word}", "phonetic": "/phiên âm/", "definitions": [ { "partOfSpeech": "loại từ", "meanings": [ { "definition": "Giải thích nghĩa bằng tiếng Việt thật chi tiết, sử dụng Markdown.", "example": "Câu ví dụ tiếng Anh." } ] } ], "wordFamily": [ {"word": "...", "type": "..."} ], "etymology": "Giải thích chi tiết về nguồn gốc, lịch sử của từ bằng tiếng Việt, sử dụng Markdown.", "diverseExamples": [ { "topic": "...", "sentence": "...", "translation": "..." } ] } Với "diverseExamples", hãy tạo ra 10 ví dụ đa dạng. Mỗi ví dụ phải có bản dịch tiếng Việt.`;
 
             try {
@@ -531,7 +571,6 @@
 
         // --- Các hàm render ---
         function renderResult(data) {
-            // **MODIFIED: Removed direct rendering of flashcard/quizzes**
             resultView.innerHTML = `
                 ${renderMainCard(data)}
                 ${renderEtymology(data.etymology)}
@@ -607,7 +646,6 @@
         function renderCollocations(word) { const icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>`; const content = `<div id="collocations-content"><button id="fetch-collocations-btn" data-word="${word}" class="flex items-center justify-center w-full sm:w-auto bg-yellow-50 hover:bg-yellow-100 text-yellow-700 font-semibold px-4 py-2 rounded-lg transition-colors">Xem Cụm từ phổ biến</button></div>`; return renderSection('Cụm từ phổ biến', content, icon); }
         function renderDiverseExamples(examples) { if (!examples || examples.length === 0) return ''; const icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v11.494m-9-5.747h18" /></svg>`; const content = `<ol class="list-decimal list-inside space-y-4">${examples.map(ex => `<li><div class="flex items-center"><p class="flex-grow font-semibold text-slate-800">${ex.sentence}</p><button class="play-example-btn p-1 rounded-full hover:bg-cyan-100 text-cyan-600 transition-colors ml-2 flex-shrink-0" data-sentence="${ex.sentence}"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" /></svg></button></div><p class="text-sm text-slate-500 italic mt-1 pl-2">→ ${ex.translation} <span class="text-xs font-medium bg-cyan-100 text-cyan-700 px-2 py-0.5 rounded-full ml-1">${ex.topic}</span></p></li>`).join('')}</ol>`; return renderSection('10 Ví dụ Mở rộng', content, icon); }
         
-        // **NEW: Functions to render interactive section on demand**
         function renderInteractiveSection(data) {
             const icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
             const content = `<div id="interactive-content">
@@ -644,7 +682,6 @@
         function renderFillInTheBlankQuiz(quiz, index) { return `<div class="quiz-container p-4 border-t border-slate-200" data-quiz-index="${index}"><p class="font-semibold mb-3">${index + 1}. ${quiz.question}</p><div class="flex gap-2"><input type="text" class="quiz-input flex-grow p-2 border border-slate-300 rounded-md" placeholder="Nhập đáp án..."><button class="check-answer-btn px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors">Kiểm tra</button></div><div class="quiz-feedback mt-3 h-auto text-sm"></div></div>`; }
         function renderWordFormationQuiz(quiz, index) { return renderFillInTheBlankQuiz(quiz, index); }
         
-        // **NEW: Fetch interactive content on demand**
         async function fetchAndRenderInteractives(button) {
             button.disabled = true;
             button.innerHTML = `<div class="spinner h-5 w-5 mx-auto"></div>`;
@@ -678,7 +715,6 @@
                 
                 container.innerHTML = flashcardHtml + quizzesHtml;
 
-                // Add event listener for the newly added quizzes
                 container.addEventListener('click', (e) => {
                     const flashcard = e.target.closest('#flashcard');
                     if (flashcard) {
@@ -739,12 +775,10 @@
                 const fetchCollocationsBtn = target.closest('#fetch-collocations-btn');
                 const audioButton = target.closest('#audioButton');
                 const favoriteButton = target.closest('#favorite-btn');
-                const fetchInteractivesBtn = target.closest('#fetch-interactives-btn'); // **NEW**
+                const fetchInteractivesBtn = target.closest('#fetch-interactives-btn');
 
                 if (audioButton) {
-                    const utterance = new SpeechSynthesisUtterance(data.word);
-                    utterance.lang = 'en-US';
-                    window.speechSynthesis.speak(utterance);
+                    speakText(data.word); // **MODIFIED: Use helper function**
                     return;
                 }
                 
@@ -755,9 +789,7 @@
 
                 if (playExampleBtn) {
                     const sentence = playExampleBtn.dataset.sentence;
-                    const utterance = new SpeechSynthesisUtterance(sentence);
-                    utterance.lang = 'en-US';
-                    window.speechSynthesis.speak(utterance);
+                    speakText(sentence); // **MODIFIED: Use helper function**
                     return;
                 }
 
@@ -781,7 +813,6 @@
                     return;
                 }
                 
-                // **NEW**
                 if (fetchInteractivesBtn) {
                     fetchAndRenderInteractives(fetchInteractivesBtn);
                     return;
