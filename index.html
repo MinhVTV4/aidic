@@ -16,7 +16,7 @@
         /* Custom styles */
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f3f4f6; /* Light gray background */
+            background-color: #f3f4f6;
         }
         /* Spinner animation */
         .spinner {
@@ -57,7 +57,7 @@
             align-items: center;
             justify-content: center;
             flex-direction: column;
-            border-radius: 0.75rem; /* rounded-xl */
+            border-radius: 0.75rem;
         }
         .flashcard-back {
             transform: rotateY(180deg);
@@ -68,14 +68,23 @@
         .prose em { font-style: italic; }
         .prose ul { list-style-type: disc; margin-left: 1.5rem; }
         .prose ol { list-style-type: decimal; margin-left: 1.5rem; }
-
     </style>
 </head>
 <body class="text-gray-800">
 
     <div class="container mx-auto p-4 max-w-2xl min-h-screen flex flex-col">
+        <!-- Auth Section -->
+        <div id="auth-container" class="absolute top-4 right-4 text-right">
+            <button id="login-btn" class="bg-white text-gray-700 font-semibold px-4 py-2 rounded-lg shadow hover:bg-gray-100 transition">Đăng nhập với Google</button>
+            <div id="user-info" class="hidden items-center gap-3">
+                <span id="user-name" class="font-semibold text-gray-700"></span>
+                <img id="user-avatar" class="w-10 h-10 rounded-full" src="" alt="User Avatar">
+                <button id="logout-btn" class="text-sm text-gray-500 hover:text-blue-600">Đăng xuất</button>
+            </div>
+        </div>
+
         <!-- Header -->
-        <header class="text-center my-8">
+        <header class="text-center my-8 mt-20">
             <h1 class="text-4xl sm:text-5xl font-extrabold text-blue-600">Từ điển AI Pro</h1>
             <p class="text-gray-500 mt-2">Biến mỗi lần tra từ thành một buổi học</p>
         </header>
@@ -103,6 +112,7 @@
                     </svg>
                     <h3 class="mt-2 text-lg font-medium text-gray-900">Khám phá thế giới từ vựng</h3>
                     <p class="mt-1 text-sm text-gray-500">Kết quả tra cứu chi tiết sẽ xuất hiện ở đây.</p>
+                    <p id="login-prompt" class="mt-4 text-sm text-blue-600 font-medium hidden">Vui lòng đăng nhập để lưu lịch sử và tạo sổ tay từ vựng của riêng bạn.</p>
                 </div>
                  <!-- Loading State -->
                 <div id="loadingState" class="hidden text-center py-10 px-4">
@@ -113,6 +123,24 @@
                 <!-- Result Display -->
                 <div id="resultView" class="hidden space-y-6"></div>
             </div>
+
+            <!-- User Data Section (History & Favorites) -->
+            <div id="user-data-section" class="hidden mt-10 space-y-8">
+                <!-- History -->
+                <div>
+                    <h3 class="text-2xl font-bold text-gray-800 mb-4">Lịch sử tra cứu</h3>
+                    <div id="history-list" class="bg-white p-4 rounded-xl shadow-md space-y-2">
+                        <p class="text-gray-500">Chưa có từ nào trong lịch sử.</p>
+                    </div>
+                </div>
+                <!-- Favorites -->
+                <div>
+                    <h3 class="text-2xl font-bold text-gray-800 mb-4">Sổ tay từ vựng</h3>
+                    <div id="favorites-list" class="bg-white p-4 rounded-xl shadow-md space-y-2">
+                         <p class="text-gray-500">Chưa có từ nào trong sổ tay.</p>
+                    </div>
+                </div>
+            </div>
         </main>
 
         <!-- Footer -->
@@ -122,11 +150,13 @@
     </div>
 
     <script type="module">
-        // Using the original connection method as requested
+        // Import các module cần thiết từ Firebase SDK
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-app.js";
         import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-ai.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-firestore.js";
 
-        // Firebase configuration
+        // Cấu hình Firebase (giữ nguyên)
         const firebaseConfig = {
             apiKey: "AIzaSyAfBK2wYvEI4IliEBUnwLcZy4cMvsdmlvA",
             authDomain: "aidic-f89e5.firebaseapp.com",
@@ -136,7 +166,12 @@
             appId: "1:860586749960:web:b738b148aa59c6ebf821bd"
         };
 
-        // DOM Elements
+        // --- Khởi tạo các dịch vụ Firebase ---
+        let app, ai, model, auth, db;
+        let currentUser = null;
+        let userFavorites = new Set();
+
+        // --- DOM Elements ---
         const wordInput = document.getElementById('wordInput');
         const lookupButton = document.getElementById('lookupButton');
         const buttonText = document.getElementById('buttonText');
@@ -147,20 +182,29 @@
         const placeholder = document.getElementById('placeholder');
         const loadingState = document.getElementById('loadingState');
         const resultView = document.getElementById('resultView');
+        const loginBtn = document.getElementById('login-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+        const userInfoDiv = document.getElementById('user-info');
+        const userNameSpan = document.getElementById('user-name');
+        const userAvatarImg = document.getElementById('user-avatar');
+        const loginPrompt = document.getElementById('login-prompt');
+        const userDataSection = document.getElementById('user-data-section');
+        const historyListDiv = document.getElementById('history-list');
+        const favoritesListDiv = document.getElementById('favorites-list');
 
-        let model;
+        // --- Chức năng chính ---
 
-        // --- AI and App Initialization ---
-        function initializeAI() {
+        // 1. Khởi tạo ứng dụng và các dịch vụ
+        function initializeAppAndAI() {
             try {
-                const app = initializeApp(firebaseConfig);
-                const ai = getAI(app, { backend: new GoogleAIBackend() });
+                app = initializeApp(firebaseConfig);
+                ai = getAI(app, { backend: new GoogleAIBackend() });
                 model = getGenerativeModel(ai, { model: "gemini-1.5-flash-latest" });
+                auth = getAuth(app);
+                db = getFirestore(app);
 
-                lookupButton.addEventListener('click', lookupWord);
-                wordInput.addEventListener('keyup', (event) => {
-                    if (event.key === 'Enter') lookupWord();
-                });
+                setupEventListeners();
+                setupAuthObserver(); // Thiết lập trình theo dõi trạng thái đăng nhập
                 updateStatus('Sẵn sàng nhận yêu cầu.');
             } catch (e) {
                 console.error("LỖI KHỞI TẠO:", e);
@@ -170,7 +214,53 @@
             }
         }
 
-        // --- UI State Management ---
+        // 2. Thiết lập các trình nghe sự kiện
+        function setupEventListeners() {
+            lookupButton.addEventListener('click', lookupWord);
+            wordInput.addEventListener('keyup', (event) => {
+                if (event.key === 'Enter') lookupWord();
+            });
+            loginBtn.addEventListener('click', signIn);
+            logoutBtn.addEventListener('click', logOut);
+        }
+
+        // 3. Quản lý trạng thái đăng nhập
+        function setupAuthObserver() {
+            onAuthStateChanged(auth, user => {
+                if (user) {
+                    // Người dùng đã đăng nhập
+                    currentUser = user;
+                    updateUIForLoggedInUser(user);
+                    subscribeToUserData(user.uid); // Lắng nghe dữ liệu từ Firestore
+                } else {
+                    // Người dùng đã đăng xuất
+                    currentUser = null;
+                    updateUIForLoggedOutUser();
+                }
+            });
+        }
+
+        // --- Các hàm xử lý giao diện (UI) ---
+        function updateUIForLoggedInUser(user) {
+            loginBtn.classList.add('hidden');
+            userInfoDiv.classList.remove('hidden');
+            userInfoDiv.classList.add('flex');
+            userNameSpan.textContent = user.displayName;
+            userAvatarImg.src = user.photoURL;
+            loginPrompt.classList.add('hidden');
+            userDataSection.classList.remove('hidden');
+        }
+
+        function updateUIForLoggedOutUser() {
+            loginBtn.classList.remove('hidden');
+            userInfoDiv.classList.add('hidden');
+            userInfoDiv.classList.remove('flex');
+            loginPrompt.classList.remove('hidden');
+            userDataSection.classList.add('hidden');
+            historyListDiv.innerHTML = '<p class="text-gray-500">Vui lòng đăng nhập để xem lịch sử.</p>';
+            favoritesListDiv.innerHTML = '<p class="text-gray-500">Vui lòng đăng nhập để xem sổ tay.</p>';
+        }
+
         const setUIState = (state) => {
             lookupButton.disabled = state === 'loading';
             buttonText.textContent = state === 'loading' ? 'Đang tra...' : 'Tra cứu';
@@ -184,15 +274,102 @@
 
         const updateStatus = (message, type = 'info') => {
             statusMessage.textContent = message;
-            const colors = {
-                error: 'text-red-500',
-                success: 'text-green-600',
-                info: 'text-gray-500'
-            };
+            const colors = { error: 'text-red-500', success: 'text-green-600', info: 'text-gray-500' };
             statusMessage.className = `text-sm text-center mt-2 h-5 ${colors[type]}`;
         };
 
-        // --- Main API Call Function ---
+        // --- Các hàm xác thực (Authentication) ---
+        async function signIn() {
+            const provider = new GoogleAuthProvider();
+            try {
+                await signInWithPopup(auth, provider);
+            } catch (error) {
+                console.error("Lỗi đăng nhập:", error);
+                updateStatus('Đăng nhập thất bại. Vui lòng thử lại.', 'error');
+            }
+        }
+
+        async function logOut() {
+            try {
+                await signOut(auth);
+            } catch (error) {
+                console.error("Lỗi đăng xuất:", error);
+            }
+        }
+
+        // --- Các hàm tương tác với Firestore ---
+        function subscribeToUserData(userId) {
+            // Lắng nghe thay đổi trong collection 'favorites'
+            const favsQuery = query(collection(db, 'users', userId, 'favorites'), orderBy('word'));
+            onSnapshot(favsQuery, (snapshot) => {
+                userFavorites.clear();
+                const favWords = [];
+                snapshot.forEach(doc => {
+                    userFavorites.add(doc.id);
+                    favWords.push({ id: doc.id, ...doc.data() });
+                });
+                renderWordList(favoritesListDiv, favWords, 'Chưa có từ nào trong sổ tay.');
+            });
+
+            // Lắng nghe thay đổi trong collection 'history'
+            const historyQuery = query(collection(db, 'users', userId, 'history'), orderBy('timestamp', 'desc'));
+            onSnapshot(historyQuery, (snapshot) => {
+                const historyWords = [];
+                snapshot.forEach(doc => {
+                    historyWords.push({ id: doc.id, ...doc.data() });
+                });
+                renderWordList(historyListDiv, historyWords, 'Chưa có từ nào trong lịch sử.');
+            });
+        }
+        
+        async function saveToHistory(wordData) {
+            if (!currentUser) return;
+            const historyRef = doc(db, 'users', currentUser.uid, 'history', wordData.word.toLowerCase());
+            try {
+                await setDoc(historyRef, {
+                    word: wordData.word,
+                    phonetic: wordData.phonetic || '',
+                    definition: wordData.definitions?.[0]?.meanings?.[0]?.definition || '',
+                    timestamp: new Date()
+                }, { merge: true });
+            } catch (error) {
+                console.error("Lỗi lưu lịch sử:", error);
+            }
+        }
+
+        async function toggleFavorite(wordData) {
+            if (!currentUser) {
+                updateStatus('Vui lòng đăng nhập để lưu từ.', 'error');
+                return;
+            }
+            const favRef = doc(db, 'users', currentUser.uid, 'favorites', wordData.word.toLowerCase());
+            const starButton = document.getElementById('favorite-btn');
+            try {
+                if (userFavorites.has(wordData.word.toLowerCase())) {
+                    // Đã có, giờ xóa đi
+                    await deleteDoc(favRef);
+                    starButton.querySelector('svg').classList.remove('fill-yellow-400', 'text-yellow-400');
+                    starButton.querySelector('svg').classList.add('text-gray-400');
+                    updateStatus(`Đã xóa "${wordData.word}" khỏi sổ tay.`, 'success');
+                } else {
+                    // Chưa có, giờ thêm vào
+                    await setDoc(favRef, {
+                        word: wordData.word,
+                        phonetic: wordData.phonetic || '',
+                        definition: wordData.definitions?.[0]?.meanings?.[0]?.definition || '',
+                        timestamp: new Date()
+                    });
+                    starButton.querySelector('svg').classList.add('fill-yellow-400', 'text-yellow-400');
+                    starButton.querySelector('svg').classList.remove('text-gray-400');
+                    updateStatus(`Đã lưu "${wordData.word}" vào sổ tay.`, 'success');
+                }
+            } catch (error) {
+                console.error("Lỗi khi cập nhật sổ tay:", error);
+                updateStatus('Cập nhật sổ tay thất bại.', 'error');
+            }
+        }
+        
+        // --- Hàm tra cứu chính ---
         async function lookupWord() {
             const word = wordInput.value.trim();
             if (!word) {
@@ -202,46 +379,7 @@
             setUIState('loading');
             resultView.innerHTML = '';
 
-            const prompt = `
-                Bạn là một chuyên gia ngôn ngữ và giáo viên tiếng Anh cho người Việt. Với từ khóa "${word}", hãy trả về một đối tượng JSON duy nhất chứa các thông tin CỐT LÕI. Mọi giải thích phải bằng tiếng Việt, thật chi tiết, rõ ràng và dễ hiểu. Sử dụng Markdown đơn giản (in đậm, in nghiêng, gạch đầu dòng) để định dạng các phần giải thích cho dễ đọc.
-                KHÔNG BAO GỒM "synonyms", "antonyms", "collocations" trong lần gọi đầu tiên này.
-                Đối tượng JSON phải có cấu trúc:
-                {
-                  "word": "${word}",
-                  "phonetic": "/phiên âm/",
-                  "definitions": [
-                    {
-                      "partOfSpeech": "loại từ",
-                      "meanings": [
-                        {
-                          "definition": "Giải thích nghĩa bằng tiếng Việt thật chi tiết, sử dụng Markdown.",
-                          "example": "Câu ví dụ tiếng Anh."
-                        }
-                      ]
-                    }
-                  ],
-                  "wordFamily": [ {"word": "...", "type": "..."} ],
-                  "etymology": "Giải thích chi tiết về nguồn gốc, lịch sử của từ bằng tiếng Việt, sử dụng Markdown.",
-                  "diverseExamples": [
-                      { "topic": "...", "sentence": "...", "translation": "..." }
-                  ],
-                  "interactiveQuizzes": [
-                    {
-                      "type": "multiple_choice",
-                      "question": "...", "options": ["..."], "answer": "...", "explanation": "..."
-                    },
-                    {
-                      "type": "fill_in_the_blank",
-                      "question": "...", "answer": "...", "explanation": "..."
-                    },
-                    {
-                      "type": "word_formation",
-                      "question": "...", "answer": "...", "explanation": "..."
-                    }
-                  ]
-                }
-                Với "diverseExamples", hãy tạo ra 10 ví dụ đa dạng. Mỗi ví dụ phải có bản dịch tiếng Việt.
-            `;
+            const prompt = `Bạn là một chuyên gia ngôn ngữ và giáo viên tiếng Anh cho người Việt. Với từ khóa "${word}", hãy trả về một đối tượng JSON duy nhất chứa các thông tin CỐT LÕI. Mọi giải thích phải bằng tiếng Việt, thật chi tiết, rõ ràng và dễ hiểu. Sử dụng Markdown đơn giản (in đậm, in nghiêng, gạch đầu dòng) để định dạng các phần giải thích cho dễ đọc. KHÔNG BAO GỒM "synonyms", "antonyms", "collocations" trong lần gọi đầu tiên này. Đối tượng JSON phải có cấu trúc: { "word": "${word}", "phonetic": "/phiên âm/", "definitions": [ { "partOfSpeech": "loại từ", "meanings": [ { "definition": "Giải thích nghĩa bằng tiếng Việt thật chi tiết, sử dụng Markdown.", "example": "Câu ví dụ tiếng Anh." } ] } ], "wordFamily": [ {"word": "...", "type": "..."} ], "etymology": "Giải thích chi tiết về nguồn gốc, lịch sử của từ bằng tiếng Việt, sử dụng Markdown.", "diverseExamples": [ { "topic": "...", "sentence": "...", "translation": "..." } ], "interactiveQuizzes": [ { "type": "multiple_choice", "question": "...", "options": ["..."], "answer": "...", "explanation": "..." }, { "type": "fill_in_the_blank", "question": "...", "answer": "...", "explanation": "..." }, { "type": "word_formation", "question": "...", "answer": "...", "explanation": "..." } ] } Với "diverseExamples", hãy tạo ra 10 ví dụ đa dạng. Mỗi ví dụ phải có bản dịch tiếng Việt.`;
 
             try {
                 const result = await model.generateContent(prompt);
@@ -252,7 +390,10 @@
                 
                 console.log("Parsed AI Response:", data);
                 renderResult(data);
-                updateStatus('', 'info'); // Clear status on success
+                if (currentUser) {
+                    saveToHistory(data);
+                }
+                updateStatus('', 'info');
             } catch (error) {
                 console.error("Lỗi khi tra cứu:", error);
                 updateStatus(`Đã xảy ra lỗi: ${error.message}`, 'error');
@@ -262,7 +403,8 @@
             }
         }
 
-        // --- Rendering Functions ---
+        // --- Các hàm render ---
+        // (Các hàm render như renderSection, renderEtymology, renderWordFamily, etc. giữ nguyên như cũ)
         function renderResult(data) {
             resultView.innerHTML = `
                 ${renderMainCard(data)}
@@ -274,10 +416,13 @@
                 ${renderFlashcard(data)}
                 ${renderQuizzes(data.interactiveQuizzes)}
             `;
-            addEventListeners(data);
+            addResultEventListeners(data);
         }
 
         function renderMainCard(data) {
+            const isFavorited = currentUser && userFavorites.has(data.word.toLowerCase());
+            const starColorClass = isFavorited ? 'text-yellow-400 fill-yellow-400' : 'text-gray-400';
+
             return `
             <div class="bg-white p-6 rounded-xl shadow-lg fade-in">
                 <div class="flex justify-between items-start">
@@ -285,9 +430,14 @@
                         <h2 class="text-4xl sm:text-5xl font-extrabold text-gray-900">${data.word}</h2>
                         <p class="text-xl text-gray-500 mt-1">${data.phonetic || ''}</p>
                     </div>
-                    <button id="audioButton" class="p-3 rounded-full hover:bg-blue-100 text-blue-600 transition">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"></path></svg>
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button id="favorite-btn" title="Lưu vào sổ tay" class="p-3 rounded-full hover:bg-yellow-100 ${starColorClass} transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+                        </button>
+                        <button id="audioButton" title="Phát âm" class="p-3 rounded-full hover:bg-blue-100 text-blue-600 transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"></path></svg>
+                        </button>
+                    </div>
                 </div>
                 <div class="mt-6 space-y-5">
                     ${(data.definitions || []).map(def => `
@@ -306,237 +456,73 @@
                 </div>
             </div>`;
         }
-        
-        function renderSection(title, content, icon) {
-            if (!content) return '';
-            return `
-            <div class="bg-white p-6 rounded-xl shadow-lg fade-in">
-                <div class="flex items-center">
-                    ${icon}
-                    <h3 class="text-2xl font-bold text-gray-800 ml-3">${title}</h3>
-                </div>
-                <div class="mt-4 text-gray-700 space-y-2 prose">
-                    ${content}
-                </div>
-            </div>`;
-        }
 
-        function renderEtymology(etymology) {
-            if (!etymology) return '';
-            const icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
-            return renderSection('Nguồn gốc từ', marked.parse(etymology), icon);
-        }
-
-        function renderWordFamily(family) {
-            if (!family || family.length === 0) return '';
-            const icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656-.126-1.283-.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>`;
-            const content = `<div class="flex flex-wrap gap-2">${family.map(member => `
-                <button data-word="${member.word}" class="word-family-link bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium hover:bg-green-200 hover:text-green-900 focus:outline-none focus:ring-2 focus:ring-green-400 transition">
-                    ${member.word} <span class="font-normal opacity-75">(${member.type})</span>
-                </button>
-            `).join('')}</div>`;
-            return renderSection('Gia đình từ', content, icon);
-        }
-        
-        function renderSynonymsAntonyms(word) {
-            const icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>`;
-            const content = `<div id="synonyms-content">
-                <button id="fetch-synonyms-btn" data-word="${word}" class="flex items-center justify-center w-full sm:w-auto bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold px-4 py-2 rounded-lg transition">
-                    Xem Đồng nghĩa & Trái nghĩa
-                </button>
-            </div>`;
-            return renderSection('Đồng nghĩa & Trái nghĩa', content, icon);
-        }
-
-        function renderCollocations(word) {
-            const icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>`;
-            const content = `<div id="collocations-content">
-                <button id="fetch-collocations-btn" data-word="${word}" class="flex items-center justify-center w-full sm:w-auto bg-yellow-50 hover:bg-yellow-100 text-yellow-700 font-semibold px-4 py-2 rounded-lg transition">
-                    Xem Cụm từ phổ biến
-                </button>
-            </div>`;
-            return renderSection('Cụm từ phổ biến', content, icon);
-        }
-
-        function renderDiverseExamples(examples) {
-            if (!examples || examples.length === 0) return '';
-            const icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v11.494m-9-5.747h18" /></svg>`;
-            const content = `<ol class="list-decimal list-inside space-y-4">${examples.map(ex => `
-                <li>
-                    <div class="flex items-center">
-                        <p class="flex-grow font-semibold text-gray-800">${ex.sentence}</p>
-                        <button class="play-example-btn p-1 rounded-full hover:bg-cyan-100 text-cyan-600 transition ml-2 flex-shrink-0" data-sentence="${ex.sentence}">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" /></svg>
-                        </button>
-                    </div>
-                    <p class="text-sm text-gray-500 italic mt-1 pl-2">→ ${ex.translation} <span class="text-xs font-medium bg-cyan-100 text-cyan-700 px-2 py-0.5 rounded-full ml-1">${ex.topic}</span></p>
-                </li>
-            `).join('')}</ol>`;
-            return renderSection('10 Ví dụ Mở rộng', content, icon);
-        }
-
-        function renderFlashcard(data) {
-            const definition = data.definitions?.[0]?.meanings?.[0]?.definition || "Không có định nghĩa.";
-            return `
-            <div class="fade-in">
-                <h3 class="text-2xl font-bold text-gray-800 ml-3 mb-4 text-center">Flashcard Ghi nhớ</h3>
-                <div id="flashcard" class="flashcard h-48 cursor-pointer group">
-                    <div class="flashcard-inner">
-                        <div class="flashcard-front bg-white shadow-lg flex-col p-4">
-                            <h4 class="text-4xl font-bold text-gray-800">${data.word}</h4>
-                            <p class="text-gray-400 mt-2">(Nhấn để lật)</p>
-                        </div>
-                        <div class="flashcard-back bg-blue-600 text-white flex-col text-center p-4">
-                            <div class="text-lg prose text-white">${marked.parse(definition)}</div>
-                            <p class="text-sm opacity-80 mt-2">${data.phonetic || ''}</p>
-                        </div>
-                    </div>
-                </div>
-            </div>`;
-        }
-        
-        function renderQuizzes(quizzes) {
-            if (!quizzes || quizzes.length === 0) return '';
-            const icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
-            const content = quizzes.map((quiz, index) => {
-                if (!quiz) return ''; 
-                switch(quiz.type) {
-                    case 'multiple_choice':
-                        return renderMultipleChoiceQuiz(quiz, index);
-                    case 'fill_in_the_blank':
-                        return renderFillInTheBlankQuiz(quiz, index);
-                    case 'word_formation':
-                        return renderWordFormationQuiz(quiz, index);
-                    default:
-                        return '';
-                }
-            }).join('');
-            return renderSection('Kiểm tra nhanh', content, icon);
-        }
-
-        function renderMultipleChoiceQuiz(quiz, index) {
-            return `
-            <div class="quiz-container p-4 border-t border-gray-200" data-quiz-index="${index}">
-                <p class="font-semibold mb-3">${index + 1}. ${quiz.question}</p>
-                <div class="quiz-options space-y-2">
-                    ${(quiz.options || []).map(opt => `<button data-option="${opt}" class="quiz-option w-full text-left p-3 bg-gray-100 hover:bg-blue-100 rounded-lg transition">${opt}</button>`).join('')}
-                </div>
-                <div class="quiz-feedback mt-3 h-auto text-sm"></div>
-            </div>`;
-        }
-
-        function renderFillInTheBlankQuiz(quiz, index) {
-            return `
-            <div class="quiz-container p-4 border-t border-gray-200" data-quiz-index="${index}">
-                <p class="font-semibold mb-3">${index + 1}. ${quiz.question}</p>
-                <div class="flex gap-2">
-                    <input type="text" class="quiz-input flex-grow p-2 border border-gray-300 rounded-md" placeholder="Nhập đáp án...">
-                    <button class="check-answer-btn px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">Kiểm tra</button>
-                </div>
-                <div class="quiz-feedback mt-3 h-auto text-sm"></div>
-            </div>`;
-        }
-        
-        function renderWordFormationQuiz(quiz, index) {
-            return renderFillInTheBlankQuiz(quiz, index); // Same structure
-        }
-
-        // --- On-demand fetching functions ---
-        async function fetchSynonymsAntonyms(word, button) {
-            button.disabled = true;
-            button.innerHTML = `<div class="spinner h-5 w-5 mx-auto"></div>`;
-            const prompt = `Bạn là một chuyên gia từ điển cho người Việt. Cho từ tiếng Anh "${word}", hãy cung cấp các **từ đồng nghĩa (synonyms)** và **từ trái nghĩa (antonyms)** bằng **TIẾNG ANH**. Mỗi từ phải đi kèm nghĩa tiếng Việt và một câu ví dụ bằng tiếng Anh. Trả về một đối tượng JSON duy nhất có cấu trúc: 
-            { 
-              "synonyms": [ 
-                {
-                  "nuance": "Sắc thái nghĩa bằng tiếng Việt...", 
-                  "words": [
-                    { "word": "từ đồng nghĩa TIẾNG ANH", "meaning": "nghĩa tiếng Việt của từ đó", "example": "câu ví dụ tiếng Anh" }
-                  ]
-                } 
-              ], 
-              "antonyms": [
-                { "word": "từ trái nghĩa TIẾNG ANH", "meaning": "nghĩa tiếng Việt của từ đó", "example": "câu ví dụ tiếng Anh" }
-              ] 
-            }`;
-            try {
-                const result = await model.generateContent(prompt);
-                const data = JSON.parse(result.response.text().replace(/^```json\s*|```\s*$/g, ''));
-                let content = '<p>Không tìm thấy thông tin.</p>';
-                if ((data.synonyms && data.synonyms.length > 0) || (data.antonyms && data.antonyms.length > 0)) {
-                    content = '';
-                    if (data.synonyms && data.synonyms.length > 0) {
-                        content += `<div><h4 class="font-semibold text-lg mb-2">Từ đồng nghĩa</h4>${data.synonyms.map(group => `
-                            <div class="mt-2 pl-4 border-l-2 border-indigo-200">
-                                <strong class="font-medium text-indigo-700">${group.nuance}:</strong>
-                                <ul class="list-disc list-inside mt-1 space-y-2">
-                                    ${(group.words || []).map(w => `<li><strong>${w.word}</strong>: ${w.meaning}<br><em class="text-gray-500 text-sm">"${w.example}"</em></li>`).join('')}
-                                </ul>
-                            </div>`).join('')}
-                        </div>`;
-                    }
-                    if (data.antonyms && data.antonyms.length > 0) {
-                        content += `<div class="mt-4"><h4 class="font-semibold text-lg mb-2">Từ trái nghĩa</h4>
-                            <ul class="list-disc list-inside space-y-2">
-                                ${(data.antonyms || []).map(w => `<li><strong>${w.word}</strong>: ${w.meaning}<br><em class="text-gray-500 text-sm">"${w.example}"</em></li>`).join('')}
-                            </ul>
-                        </div>`;
-                    }
-                }
-                document.getElementById('synonyms-content').innerHTML = content;
-            } catch (e) {
-                document.getElementById('synonyms-content').innerHTML = `<p class="text-red-500">Lỗi khi tải dữ liệu.</p>`;
+        function renderWordList(container, words, emptyMessage) {
+            if (words.length === 0) {
+                container.innerHTML = `<p class="text-gray-500">${emptyMessage}</p>`;
+                return;
             }
+            container.innerHTML = words.map(word => `
+                <div class="p-2 rounded-md hover:bg-gray-100 flex justify-between items-center cursor-pointer word-list-item" data-word="${word.word}">
+                    <div>
+                        <p class="font-semibold text-blue-700">${word.word}</p>
+                        <p class="text-sm text-gray-600">${word.definition.split('\n')[0]}</p>
+                    </div>
+                    <span class="text-xs text-gray-400">${new Date(word.timestamp.seconds * 1000).toLocaleDateString('vi-VN')}</span>
+                </div>
+            `).join('');
         }
+        
+        // Các hàm render khác (renderSection, renderEtymology, etc.) giữ nguyên như file gốc
+        // ... (Sao chép các hàm render còn lại từ file gốc vào đây)
+        function renderSection(title, content, icon) { if (!content) return ''; return `<div class="bg-white p-6 rounded-xl shadow-lg fade-in"><div class="flex items-center">${icon}<h3 class="text-2xl font-bold text-gray-800 ml-3">${title}</h3></div><div class="mt-4 text-gray-700 space-y-2 prose">${content}</div></div>`; }
+        function renderEtymology(etymology) { if (!etymology) return ''; const icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`; return renderSection('Nguồn gốc từ', marked.parse(etymology), icon); }
+        function renderWordFamily(family) { if (!family || family.length === 0) return ''; const icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656-.126-1.283-.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>`; const content = `<div class="flex flex-wrap gap-2">${family.map(member => `<button data-word="${member.word}" class="word-family-link bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium hover:bg-green-200 hover:text-green-900 focus:outline-none focus:ring-2 focus:ring-green-400 transition">${member.word} <span class="font-normal opacity-75">(${member.type})</span></button>`).join('')}</div>`; return renderSection('Gia đình từ', content, icon); }
+        function renderSynonymsAntonyms(word) { const icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>`; const content = `<div id="synonyms-content"><button id="fetch-synonyms-btn" data-word="${word}" class="flex items-center justify-center w-full sm:w-auto bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold px-4 py-2 rounded-lg transition">Xem Đồng nghĩa & Trái nghĩa</button></div>`; return renderSection('Đồng nghĩa & Trái nghĩa', content, icon); }
+        function renderCollocations(word) { const icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>`; const content = `<div id="collocations-content"><button id="fetch-collocations-btn" data-word="${word}" class="flex items-center justify-center w-full sm:w-auto bg-yellow-50 hover:bg-yellow-100 text-yellow-700 font-semibold px-4 py-2 rounded-lg transition">Xem Cụm từ phổ biến</button></div>`; return renderSection('Cụm từ phổ biến', content, icon); }
+        function renderDiverseExamples(examples) { if (!examples || examples.length === 0) return ''; const icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v11.494m-9-5.747h18" /></svg>`; const content = `<ol class="list-decimal list-inside space-y-4">${examples.map(ex => `<li><div class="flex items-center"><p class="flex-grow font-semibold text-gray-800">${ex.sentence}</p><button class="play-example-btn p-1 rounded-full hover:bg-cyan-100 text-cyan-600 transition ml-2 flex-shrink-0" data-sentence="${ex.sentence}"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" /></svg></button></div><p class="text-sm text-gray-500 italic mt-1 pl-2">→ ${ex.translation} <span class="text-xs font-medium bg-cyan-100 text-cyan-700 px-2 py-0.5 rounded-full ml-1">${ex.topic}</span></p></li>`).join('')}</ol>`; return renderSection('10 Ví dụ Mở rộng', content, icon); }
+        function renderFlashcard(data) { const definition = data.definitions?.[0]?.meanings?.[0]?.definition || "Không có định nghĩa."; return `<div class="fade-in"><h3 class="text-2xl font-bold text-gray-800 ml-3 mb-4 text-center">Flashcard Ghi nhớ</h3><div id="flashcard" class="flashcard h-48 cursor-pointer group"><div class="flashcard-inner"><div class="flashcard-front bg-white shadow-lg flex-col p-4"><h4 class="text-4xl font-bold text-gray-800">${data.word}</h4><p class="text-gray-400 mt-2">(Nhấn để lật)</p></div><div class="flashcard-back bg-blue-600 text-white flex-col text-center p-4"><div class="text-lg prose text-white">${marked.parse(definition)}</div><p class="text-sm opacity-80 mt-2">${data.phonetic || ''}</p></div></div></div></div>`; }
+        function renderQuizzes(quizzes) { if (!quizzes || quizzes.length === 0) return ''; const icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`; const content = quizzes.map((quiz, index) => { if (!quiz) return ''; switch(quiz.type) { case 'multiple_choice': return renderMultipleChoiceQuiz(quiz, index); case 'fill_in_the_blank': return renderFillInTheBlankQuiz(quiz, index); case 'word_formation': return renderWordFormationQuiz(quiz, index); default: return ''; } }).join(''); return renderSection('Kiểm tra nhanh', content, icon); }
+        function renderMultipleChoiceQuiz(quiz, index) { return `<div class="quiz-container p-4 border-t border-gray-200" data-quiz-index="${index}"><p class="font-semibold mb-3">${index + 1}. ${quiz.question}</p><div class="quiz-options space-y-2">${(quiz.options || []).map(opt => `<button data-option="${opt}" class="quiz-option w-full text-left p-3 bg-gray-100 hover:bg-blue-100 rounded-lg transition">${opt}</button>`).join('')}</div><div class="quiz-feedback mt-3 h-auto text-sm"></div></div>`; }
+        function renderFillInTheBlankQuiz(quiz, index) { return `<div class="quiz-container p-4 border-t border-gray-200" data-quiz-index="${index}"><p class="font-semibold mb-3">${index + 1}. ${quiz.question}</p><div class="flex gap-2"><input type="text" class="quiz-input flex-grow p-2 border border-gray-300 rounded-md" placeholder="Nhập đáp án..."><button class="check-answer-btn px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">Kiểm tra</button></div><div class="quiz-feedback mt-3 h-auto text-sm"></div></div>`; }
+        function renderWordFormationQuiz(quiz, index) { return renderFillInTheBlankQuiz(quiz, index); }
+        
+        // --- Các hàm fetch dữ liệu theo yêu cầu (giữ nguyên) ---
+        // ... (Sao chép các hàm fetchSynonymsAntonyms, fetchCollocations từ file gốc)
+        async function fetchSynonymsAntonyms(word, button) { button.disabled = true; button.innerHTML = `<div class="spinner h-5 w-5 mx-auto"></div>`; const prompt = `Bạn là một chuyên gia từ điển cho người Việt. Cho từ tiếng Anh "${word}", hãy cung cấp các **từ đồng nghĩa (synonyms)** và **từ trái nghĩa (antonyms)** bằng **TIẾNG ANH**. Mỗi từ phải đi kèm nghĩa tiếng Việt và một câu ví dụ bằng tiếng Anh. Trả về một đối tượng JSON duy nhất có cấu trúc: { "synonyms": [ { "nuance": "Sắc thái nghĩa bằng tiếng Việt...", "words": [ { "word": "từ đồng nghĩa TIẾNG ANH", "meaning": "nghĩa tiếng Việt của từ đó", "example": "câu ví dụ tiếng Anh" } ] } ], "antonyms": [ { "word": "từ trái nghĩa TIẾNG ANH", "meaning": "nghĩa tiếng Việt của từ đó", "example": "câu ví dụ tiếng Anh" } ] }`; try { const result = await model.generateContent(prompt); const data = JSON.parse(result.response.text().replace(/^```json\s*|```\s*$/g, '')); let content = '<p>Không tìm thấy thông tin.</p>'; if ((data.synonyms && data.synonyms.length > 0) || (data.antonyms && data.antonyms.length > 0)) { content = ''; if (data.synonyms && data.synonyms.length > 0) { content += `<div><h4 class="font-semibold text-lg mb-2">Từ đồng nghĩa</h4>${data.synonyms.map(group => `<div class="mt-2 pl-4 border-l-2 border-indigo-200"><strong class="font-medium text-indigo-700">${group.nuance}:</strong><ul class="list-disc list-inside mt-1 space-y-2">${(group.words || []).map(w => `<li><strong>${w.word}</strong>: ${w.meaning}<br><em class="text-gray-500 text-sm">"${w.example}"</em></li>`).join('')}</ul></div>`).join('')}</div>`; } if (data.antonyms && data.antonyms.length > 0) { content += `<div class="mt-4"><h4 class="font-semibold text-lg mb-2">Từ trái nghĩa</h4><ul class="list-disc list-inside space-y-2">${(data.antonyms || []).map(w => `<li><strong>${w.word}</strong>: ${w.meaning}<br><em class="text-gray-500 text-sm">"${w.example}"</em></li>`).join('')}</ul></div>`; } } document.getElementById('synonyms-content').innerHTML = content; } catch (e) { document.getElementById('synonyms-content').innerHTML = `<p class="text-red-500">Lỗi khi tải dữ liệu.</p>`; } }
+        async function fetchCollocations(word, button) { button.disabled = true; button.innerHTML = `<div class="spinner h-5 w-5 mx-auto"></div>`; const prompt = `Bạn là một chuyên gia từ điển cho người Việt. Cho từ "${word}", hãy cung cấp các cụm từ phổ biến (collocations) được phân loại để dễ học. Trả về một đối tượng JSON duy nhất có cấu trúc:{ "collocations": [ { "category": "Loại cụm từ (ví dụ: Verb + ${word})", "items": [ { "collocation": "cụm từ 1", "meaning": "nghĩa tiếng việt", "example": "câu ví dụ tiếng Anh" } ] } ] }`; try { const result = await model.generateContent(prompt); const data = JSON.parse(result.response.text().replace(/^```json\s*|```\s*$/g, '')); let content = '<p>Không tìm thấy thông tin.</p>'; if (data.collocations && data.collocations.length > 0) { content = data.collocations.map(group => `<div class="mt-2"><h4 class="font-semibold text-yellow-800 bg-yellow-100 inline-block px-2 py-1 rounded-md">${group.category}</h4><ul class="list-disc list-inside mt-2 space-y-2 pl-4">${(group.items || []).map(item => `<li><strong>${item.collocation}</strong>: ${item.meaning}<br><em class="text-gray-500 text-sm">"${item.example}"</em></li>`).join('')}</ul></div>`).join(''); } document.getElementById('collocations-content').innerHTML = content; } catch (e) { document.getElementById('collocations-content').innerHTML = `<p class="text-red-500">Lỗi khi tải dữ liệu.</p>`; } }
 
-        async function fetchCollocations(word, button) {
-            button.disabled = true;
-            button.innerHTML = `<div class="spinner h-5 w-5 mx-auto"></div>`;
-            const prompt = `Bạn là một chuyên gia từ điển cho người Việt. Cho từ "${word}", hãy cung cấp các cụm từ phổ biến (collocations) được phân loại để dễ học. Trả về một đối tượng JSON duy nhất có cấu trúc:
-            {
-              "collocations": [
-                {
-                  "category": "Loại cụm từ (ví dụ: Verb + ${word})",
-                  "items": [
-                    { "collocation": "cụm từ 1", "meaning": "nghĩa tiếng việt", "example": "câu ví dụ tiếng Anh" }
-                  ]
-                }
-              ]
-            }`;
-            try {
-                const result = await model.generateContent(prompt);
-                const data = JSON.parse(result.response.text().replace(/^```json\s*|```\s*$/g, ''));
-                let content = '<p>Không tìm thấy thông tin.</p>';
-                if (data.collocations && data.collocations.length > 0) {
-                    content = data.collocations.map(group => `
-                        <div class="mt-2">
-                            <h4 class="font-semibold text-yellow-800 bg-yellow-100 inline-block px-2 py-1 rounded-md">${group.category}</h4>
-                            <ul class="list-disc list-inside mt-2 space-y-2 pl-4">
-                                ${(group.items || []).map(item => `<li><strong>${item.collocation}</strong>: ${item.meaning}<br><em class="text-gray-500 text-sm">"${item.example}"</em></li>`).join('')}
-                            </ul>
-                        </div>
-                    `).join('');
-                }
-                document.getElementById('collocations-content').innerHTML = content;
-            } catch (e) {
-                document.getElementById('collocations-content').innerHTML = `<p class="text-red-500">Lỗi khi tải dữ liệu.</p>`;
-            }
-        }
-
-        // --- Event Listener Setup ---
-        function addEventListeners(data) {
-            document.getElementById('audioButton')?.addEventListener('click', () => {
-                const utterance = new SpeechSynthesisUtterance(data.word);
-                utterance.lang = 'en-US';
-                window.speechSynthesis.speak(utterance);
-            });
-
-            document.getElementById('flashcard')?.addEventListener('click', (e) => {
-                e.currentTarget.classList.toggle('is-flipped');
-            });
-            
+        // --- Thiết lập Event Listener ---
+        function addResultEventListeners(data) {
+            // Lắng nghe sự kiện click trên toàn bộ khu vực kết quả
             resultView.addEventListener('click', (e) => {
-                const playExampleBtn = e.target.closest('.play-example-btn');
+                const target = e.target;
+                const playExampleBtn = target.closest('.play-example-btn');
+                const wordFamilyLink = target.closest('.word-family-link');
+                const fetchSynonymsBtn = target.closest('#fetch-synonyms-btn');
+                const fetchCollocationsBtn = target.closest('#fetch-collocations-btn');
+                const quizContainer = target.closest('.quiz-container');
+                const audioButton = target.closest('#audioButton');
+                const favoriteButton = target.closest('#favorite-btn');
+                const flashcard = target.closest('#flashcard');
+
+                if (audioButton) {
+                    const utterance = new SpeechSynthesisUtterance(data.word);
+                    utterance.lang = 'en-US';
+                    window.speechSynthesis.speak(utterance);
+                    return;
+                }
+                
+                if (favoriteButton) {
+                    toggleFavorite(data);
+                    return;
+                }
+
+                if (flashcard) {
+                    flashcard.classList.toggle('is-flipped');
+                    return;
+                }
+
                 if (playExampleBtn) {
                     const sentence = playExampleBtn.dataset.sentence;
                     const utterance = new SpeechSynthesisUtterance(sentence);
@@ -545,7 +531,6 @@
                     return;
                 }
 
-                const wordFamilyLink = e.target.closest('.word-family-link');
                 if (wordFamilyLink) {
                     const wordToSearch = wordFamilyLink.dataset.word;
                     if (wordToSearch) {
@@ -556,72 +541,65 @@
                     return;
                 }
 
-                const fetchSynonymsBtn = e.target.closest('#fetch-synonyms-btn');
                 if (fetchSynonymsBtn) {
                     fetchSynonymsAntonyms(fetchSynonymsBtn.dataset.word, fetchSynonymsBtn);
                     return;
                 }
 
-                const fetchCollocationsBtn = e.target.closest('#fetch-collocations-btn');
                 if (fetchCollocationsBtn) {
                     fetchCollocations(fetchCollocationsBtn.dataset.word, fetchCollocationsBtn);
                     return;
                 }
 
-                const quizContainer = e.target.closest('.quiz-container');
-                if (!quizContainer) return;
-
-                const index = parseInt(quizContainer.dataset.quizIndex);
-                const quiz = data.interactiveQuizzes[index];
-                if (!quiz) return;
-                const feedbackEl = quizContainer.querySelector('.quiz-feedback');
-                
-                let userAnswer;
-                let isCorrect = false;
-
-                if (e.target.classList.contains('quiz-option')) {
-                    userAnswer = e.target.dataset.option;
-                    isCorrect = userAnswer === quiz.answer;
+                if (quizContainer) {
+                    const index = parseInt(quizContainer.dataset.quizIndex);
+                    const quiz = data.interactiveQuizzes[index];
+                    if (!quiz) return;
+                    const feedbackEl = quizContainer.querySelector('.quiz-feedback');
                     
-                    quizContainer.querySelectorAll('.quiz-option').forEach(btn => {
-                        btn.disabled = true;
-                        if (btn.dataset.option === quiz.answer) {
-                            btn.classList.add('!bg-green-200', 'text-green-900', 'font-semibold');
-                        } else if (btn === e.target && !isCorrect) {
-                            btn.classList.add('!bg-red-200', 'text-red-900');
-                        }
-                    });
-                     showFeedback(feedbackEl, isCorrect, quiz.explanation);
-                }
-
-                if (e.target.classList.contains('check-answer-btn')) {
-                    const inputEl = quizContainer.querySelector('.quiz-input');
-                    userAnswer = inputEl.value.trim();
-                    isCorrect = userAnswer.toLowerCase() === quiz.answer.toLowerCase();
-                    
-                    inputEl.disabled = true;
-                    e.target.disabled = true;
-                    if (isCorrect) {
-                        inputEl.classList.add('border-green-500', 'bg-green-50');
-                    } else {
-                        inputEl.classList.add('border-red-500', 'bg-red-50');
+                    if (target.classList.contains('quiz-option')) {
+                        const userAnswer = target.dataset.option;
+                        const isCorrect = userAnswer === quiz.answer;
+                        quizContainer.querySelectorAll('.quiz-option').forEach(btn => {
+                            btn.disabled = true;
+                            if (btn.dataset.option === quiz.answer) btn.classList.add('!bg-green-200', 'text-green-900', 'font-semibold');
+                            else if (btn === target && !isCorrect) btn.classList.add('!bg-red-200', 'text-red-900');
+                        });
+                        showFeedback(feedbackEl, isCorrect, quiz.explanation);
                     }
-                    showFeedback(feedbackEl, isCorrect, `Đáp án đúng là <b>${quiz.answer}</b>. ${quiz.explanation}`);
+
+                    if (target.classList.contains('check-answer-btn')) {
+                        const inputEl = quizContainer.querySelector('.quiz-input');
+                        const userAnswer = inputEl.value.trim();
+                        const isCorrect = userAnswer.toLowerCase() === quiz.answer.toLowerCase();
+                        inputEl.disabled = true;
+                        target.disabled = true;
+                        if (isCorrect) inputEl.classList.add('border-green-500', 'bg-green-50');
+                        else inputEl.classList.add('border-red-500', 'bg-red-50');
+                        showFeedback(feedbackEl, isCorrect, `Đáp án đúng là <b>${quiz.answer}</b>. ${quiz.explanation}`);
+                    }
+                }
+            });
+            
+            // Lắng nghe sự kiện click trên danh sách lịch sử/sổ tay
+             document.getElementById('user-data-section').addEventListener('click', (e) => {
+                const wordItem = e.target.closest('.word-list-item');
+                if (wordItem) {
+                    const wordToSearch = wordItem.dataset.word;
+                    wordInput.value = wordToSearch;
+                    lookupWord();
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                 }
             });
         }
         
         function showFeedback(element, isCorrect, text) {
              const feedbackHTML = marked.parse(text || '');
-             element.innerHTML = `
-                <div class="p-3 rounded-md ${isCorrect ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
-                    <b class="block mb-1">${isCorrect ? 'Chính xác!' : 'Chưa đúng.'}</b> 
-                    <div class="prose prose-sm">${feedbackHTML}</div>
-                </div>`;
+             element.innerHTML = `<div class="p-3 rounded-md ${isCorrect ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}"><b class="block mb-1">${isCorrect ? 'Chính xác!' : 'Chưa đúng.'}</b> <div class="prose prose-sm">${feedbackHTML}</div></div>`;
         }
 
-        // Start the application
-        initializeAI();
+        // Bắt đầu ứng dụng
+        initializeAppAndAI();
     </script>
 </body>
 </html>
