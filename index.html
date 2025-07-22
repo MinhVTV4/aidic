@@ -272,7 +272,7 @@
             try {
                 app = initializeApp(firebaseConfig);
                 ai = getAI(app, { backend: new GoogleAIBackend() });
-                model = getGenerativeModel(ai, { model: "gemini-1.5-flash-latest" });
+                model = getGenerativeModel(ai, { model: "gemini-2.5-flash" });
                 auth = getAuth(app);
                 db = getFirestore(app);
 
