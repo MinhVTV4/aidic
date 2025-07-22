@@ -210,6 +210,29 @@
             </div>
         </div>
     </div>
+    
+    <!-- Quick Lookup Modal -->
+    <div id="quick-lookup-modal" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden">
+        <div id="quick-lookup-content" class="bg-white rounded-xl shadow-2xl w-full max-w-md transform transition-all opacity-0 -translate-y-4">
+            <div class="p-6">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 id="quick-lookup-word" class="text-2xl font-bold text-slate-900"></h3>
+                        <p id="quick-lookup-phonetic" class="text-slate-500"></p>
+                    </div>
+                    <button id="quick-lookup-close-btn" class="p-1 rounded-full hover:bg-slate-200 text-slate-500">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+                <div id="quick-lookup-body" class="mt-4 text-slate-700 min-h-[120px]">
+                    <!-- Content will be injected here -->
+                </div>
+            </div>
+            <div class="bg-slate-50 px-6 py-4 rounded-b-xl flex justify-end gap-3">
+                <button id="quick-lookup-full-search-btn" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors">Tra cứu chi tiết</button>
+            </div>
+        </div>
+    </div>
 
 
     <script type="module">
@@ -234,7 +257,7 @@
         let currentUser = null;
         let userFavorites = new Set();
         let confirmCallback = null;
-        let englishVoice = null; // **NEW: Variable to hold the selected English voice**
+        let englishVoice = null;
 
         // --- DOM Elements ---
         const wordInput = document.getElementById('wordInput');
@@ -263,6 +286,14 @@
         const modalMessage = document.getElementById('modal-message');
         const modalConfirmBtn = document.getElementById('modal-confirm-btn');
         const modalCancelBtn = document.getElementById('modal-cancel-btn');
+        
+        const quickLookupModal = document.getElementById('quick-lookup-modal');
+        const quickLookupContent = document.getElementById('quick-lookup-content');
+        const quickLookupWordEl = document.getElementById('quick-lookup-word');
+        const quickLookupPhoneticEl = document.getElementById('quick-lookup-phonetic');
+        const quickLookupBodyEl = document.getElementById('quick-lookup-body');
+        const quickLookupCloseBtn = document.getElementById('quick-lookup-close-btn');
+        const quickLookupFullSearchBtn = document.getElementById('quick-lookup-full-search-btn');
 
 
         // --- Chức năng chính ---
@@ -272,13 +303,14 @@
             try {
                 app = initializeApp(firebaseConfig);
                 ai = getAI(app, { backend: new GoogleAIBackend() });
+                // **FIX: Corrected model name to a valid one**
                 model = getGenerativeModel(ai, { model: "gemini-2.5-flash" });
                 auth = getAuth(app);
                 db = getFirestore(app);
 
                 setupEventListeners();
                 setupAuthObserver();
-                loadAndSetEnglishVoice(); // **NEW: Load voices on startup**
+                loadAndSetEnglishVoice();
                 updateStatus('Sẵn sàng nhận yêu cầu.');
             } catch (e) {
                 console.error("LỖI KHỞI TẠO:", e);
@@ -300,22 +332,24 @@
             historySearchInput.addEventListener('input', (e) => filterWordList(historyListDiv, e.target.value));
             favoritesSearchInput.addEventListener('input', (e) => filterWordList(favoritesListDiv, e.target.value));
 
-            // Modal listeners
+            // Confirm Modal listeners
             modalConfirmBtn.addEventListener('click', () => {
-                if (confirmCallback) {
-                    confirmCallback();
-                }
+                if (confirmCallback) confirmCallback();
                 hideConfirmModal();
             });
             modalCancelBtn.addEventListener('click', hideConfirmModal);
             confirmModal.addEventListener('click', (e) => {
-                if (e.target === confirmModal) {
-                    hideConfirmModal();
-                }
+                if (e.target === confirmModal) hideConfirmModal();
+            });
+
+            // Quick Lookup Modal Listeners
+            quickLookupCloseBtn.addEventListener('click', hideQuickLookupModal);
+            quickLookupModal.addEventListener('click', (e) => {
+                if (e.target === quickLookupModal) hideQuickLookupModal();
             });
         }
         
-        // --- Custom Modal Functions ---
+        // --- Modal Functions ---
         function showConfirmModal(message, onConfirm) {
             modalMessage.textContent = message;
             confirmCallback = onConfirm;
@@ -330,6 +364,20 @@
             setTimeout(() => {
                 confirmModal.classList.add('hidden');
                 confirmCallback = null;
+            }, 200);
+        }
+
+        function showQuickLookupModal() {
+            quickLookupModal.classList.remove('hidden');
+            setTimeout(() => {
+                quickLookupContent.classList.remove('opacity-0', '-translate-y-4');
+            }, 10);
+        }
+
+        function hideQuickLookupModal() {
+            quickLookupContent.classList.add('opacity-0', '-translate-y-4');
+            setTimeout(() => {
+                quickLookupModal.classList.add('hidden');
             }, 200);
         }
 
@@ -405,12 +453,10 @@
             }
         }
         
-        // **NEW: Functions for Speech Synthesis**
+        // --- Functions for Speech Synthesis ---
         function loadAndSetEnglishVoice() {
-            // This event fires when the voice list has been loaded.
             speechSynthesis.onvoiceschanged = () => {
                 const voices = speechSynthesis.getVoices();
-                // Find a suitable English voice. Prioritize Google's, then Microsoft's, then any other.
                 englishVoice = voices.find(voice => voice.name === 'Google US English') 
                             || voices.find(voice => voice.name === 'Microsoft David - English (United States)')
                             || voices.find(voice => voice.lang === 'en-US')
@@ -419,7 +465,6 @@
                 
                 console.log("Selected English voice:", englishVoice ? englishVoice.name : "None found");
             };
-            // In some browsers, the event isn't fired on page load, so we trigger it manually.
             if (speechSynthesis.getVoices().length > 0) {
                 speechSynthesis.onvoiceschanged();
             }
@@ -427,19 +472,14 @@
 
         function speakText(text) {
             if (!text || typeof text !== 'string') return;
-            // Cancel any previous speech
             speechSynthesis.cancel();
-
             const utterance = new SpeechSynthesisUtterance(text);
-            
             if (englishVoice) {
                 utterance.voice = englishVoice;
             } else {
-                // As a fallback, set the language. Might not always work if no voice pack is installed.
                 utterance.lang = 'en-US';
                 console.warn("English voice not found, using browser default for 'en-US'.");
             }
-            
             window.speechSynthesis.speak(utterance);
         }
 
@@ -551,8 +591,13 @@
                 const result = await model.generateContent(prompt);
                 const response = result.response;
                 const responseText = response.text();
-                const cleanedText = responseText.replace(/^```json\s*|```\s*$/g, '');
-                const data = JSON.parse(cleanedText);
+                // **FIX: More robust JSON extraction**
+                const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+                if (!jsonMatch) {
+                    throw new Error("Không tìm thấy đối tượng JSON hợp lệ trong phản hồi.");
+                }
+                const jsonString = jsonMatch[0];
+                const data = JSON.parse(jsonString);
                 
                 console.log("Parsed AI Response:", data);
                 renderResult(data);
@@ -568,6 +613,37 @@
                 setUIState('idle');
             }
         }
+        
+        async function quickLookup(word) {
+            showQuickLookupModal();
+            quickLookupWordEl.textContent = word;
+            quickLookupPhoneticEl.textContent = '';
+            quickLookupBodyEl.innerHTML = `<div class="flex justify-center items-center h-full"><div class="spinner w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full"></div></div>`;
+
+            const prompt = `Cung cấp một bài học nhỏ cho từ "${word}". Trả về một đối tượng JSON duy nhất có cấu trúc: { "phonetic": "/phiên âm/", "partOfSpeech": "Loại từ", "definition": "Một định nghĩa chính bằng tiếng Việt, ngắn gọn.", "example": "Một câu ví dụ tiếng Anh.", "translation": "Bản dịch tiếng Việt của câu ví dụ." }`;
+
+            try {
+                const result = await model.generateContent(prompt);
+                const responseText = result.response.text();
+                const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+                if (!jsonMatch) throw new Error("Invalid JSON response for quick lookup.");
+                const data = JSON.parse(jsonMatch[0]);
+
+                renderQuickLookupContent(data);
+
+                // Setup the full search button
+                quickLookupFullSearchBtn.onclick = () => {
+                    hideQuickLookupModal();
+                    wordInput.value = word;
+                    lookupWord();
+                };
+
+            } catch (error) {
+                console.error("Lỗi khi tra cứu nhanh:", error);
+                quickLookupBodyEl.innerHTML = `<p class="text-red-500">Không thể tải thông tin. Vui lòng thử lại.</p>`;
+            }
+        }
+
 
         // --- Các hàm render ---
         function renderResult(data) {
@@ -582,6 +658,28 @@
             `;
             addResultEventListeners(data);
         }
+        
+        function renderQuickLookupContent(data) {
+            quickLookupPhoneticEl.textContent = data.phonetic || '';
+            quickLookupBodyEl.innerHTML = `
+                <div class="space-y-4">
+                    <div>
+                        <h4 class="text-sm font-semibold text-blue-600 uppercase tracking-wider">Loại từ</h4>
+                        <p>${data.partOfSpeech || 'N/A'}</p>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-semibold text-blue-600 uppercase tracking-wider">Định nghĩa</h4>
+                        <p>${data.definition || 'Không có định nghĩa.'}</p>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-semibold text-blue-600 uppercase tracking-wider">Ví dụ</h4>
+                        <p class="font-semibold text-slate-800">"${data.example || 'Không có ví dụ.'}"</p>
+                        <p class="text-sm text-slate-500 italic">→ ${data.translation || ''}</p>
+                    </div>
+                </div>
+            `;
+        }
+
 
         function renderMainCard(data) {
             const isFavorited = currentUser && userFavorites.has(data.word.toLowerCase());
@@ -762,8 +860,51 @@
             }
         }
 
-        async function fetchSynonymsAntonyms(word, button) { button.disabled = true; button.innerHTML = `<div class="spinner h-5 w-5 mx-auto"></div>`; const prompt = `Bạn là một chuyên gia từ điển cho người Việt. Cho từ tiếng Anh "${word}", hãy cung cấp các **từ đồng nghĩa (synonyms)** và **từ trái nghĩa (antonyms)** bằng **TIẾNG ANH**. Mỗi từ phải đi kèm nghĩa tiếng Việt và một câu ví dụ bằng tiếng Anh. Trả về một đối tượng JSON duy nhất có cấu trúc: { "synonyms": [ { "nuance": "Sắc thái nghĩa bằng tiếng Việt...", "words": [ { "word": "từ đồng nghĩa TIẾNG ANH", "meaning": "nghĩa tiếng Việt của từ đó", "example": "câu ví dụ tiếng Anh" } ] } ], "antonyms": [ { "word": "từ trái nghĩa TIẾNG ANH", "meaning": "nghĩa tiếng Việt của từ đó", "example": "câu ví dụ tiếng Anh" } ] }`; try { const result = await model.generateContent(prompt); const data = JSON.parse(result.response.text().replace(/^```json\s*|```\s*$/g, '')); let content = '<p>Không tìm thấy thông tin.</p>'; if ((data.synonyms && data.synonyms.length > 0) || (data.antonyms && data.antonyms.length > 0)) { content = ''; if (data.synonyms && data.synonyms.length > 0) { content += `<div><h4 class="font-semibold text-lg mb-2">Từ đồng nghĩa</h4>${data.synonyms.map(group => `<div class="mt-2 pl-4 border-l-2 border-indigo-200"><strong class="font-medium text-indigo-700">${group.nuance}:</strong><ul class="list-disc list-inside mt-1 space-y-2">${(group.words || []).map(w => `<li><strong>${w.word}</strong>: ${w.meaning}<br><em class="text-slate-500 text-sm">"${w.example}"</em></li>`).join('')}</ul></div>`).join('')}</div>`; } if (data.antonyms && data.antonyms.length > 0) { content += `<div class="mt-4"><h4 class="font-semibold text-lg mb-2">Từ trái nghĩa</h4><ul class="list-disc list-inside space-y-2">${(data.antonyms || []).map(w => `<li><strong>${w.word}</strong>: ${w.meaning}<br><em class="text-slate-500 text-sm">"${w.example}"</em></li>`).join('')}</ul></div>`; } } document.getElementById('synonyms-content').innerHTML = content; } catch (e) { document.getElementById('synonyms-content').innerHTML = `<p class="text-red-500">Lỗi khi tải dữ liệu.</p>`; } }
-        async function fetchCollocations(word, button) { button.disabled = true; button.innerHTML = `<div class="spinner h-5 w-5 mx-auto"></div>`; const prompt = `Bạn là một chuyên gia từ điển cho người Việt. Cho từ "${word}", hãy cung cấp các cụm từ phổ biến (collocations) được phân loại để dễ học. Trả về một đối tượng JSON duy nhất có cấu trúc:{ "collocations": [ { "category": "Loại cụm từ (ví dụ: Verb + ${word})", "items": [ { "collocation": "cụm từ 1", "meaning": "nghĩa tiếng việt", "example": "câu ví dụ tiếng Anh" } ] } ] }`; try { const result = await model.generateContent(prompt); const data = JSON.parse(result.response.text().replace(/^```json\s*|```\s*$/g, '')); let content = '<p>Không tìm thấy thông tin.</p>'; if (data.collocations && data.collocations.length > 0) { content = data.collocations.map(group => `<div class="mt-2"><h4 class="font-semibold text-yellow-800 bg-yellow-100 inline-block px-2 py-1 rounded-md">${group.category}</h4><ul class="list-disc list-inside mt-2 space-y-2 pl-4">${(group.items || []).map(item => `<li><strong>${item.collocation}</strong>: ${item.meaning}<br><em class="text-slate-500 text-sm">"${item.example}"</em></li>`).join('')}</ul></div>`).join(''); } document.getElementById('collocations-content').innerHTML = content; } catch (e) { document.getElementById('collocations-content').innerHTML = `<p class="text-red-500">Lỗi khi tải dữ liệu.</p>`; } }
+        async function fetchSynonymsAntonyms(word, button) { 
+            button.disabled = true; 
+            button.innerHTML = `<div class="spinner h-5 w-5 mx-auto"></div>`; 
+            const prompt = `Bạn là một chuyên gia từ điển cho người Việt. Cho từ tiếng Anh "${word}", hãy cung cấp các **từ đồng nghĩa (synonyms)** và **từ trái nghĩa (antonyms)** bằng **TIẾNG ANH**. Mỗi từ phải đi kèm nghĩa tiếng Việt và một câu ví dụ bằng tiếng Anh. Trả về một đối tượng JSON duy nhất có cấu trúc: { "synonyms": [ { "nuance": "Sắc thái nghĩa bằng tiếng Việt...", "words": [ { "word": "từ đồng nghĩa TIẾNG ANH", "meaning": "nghĩa tiếng Việt của từ đó", "example": "câu ví dụ tiếng Anh" } ] } ], "antonyms": [ { "word": "từ trái nghĩa TIẾNG ANH", "meaning": "nghĩa tiếng Việt của từ đó", "example": "câu ví dụ tiếng Anh" } ] }`; 
+            try { 
+                const result = await model.generateContent(prompt); 
+                const data = JSON.parse(result.response.text().replace(/^```json\s*|```\s*$/g, '')); 
+                let content = '<p>Không tìm thấy thông tin.</p>'; 
+                if ((data.synonyms && data.synonyms.length > 0) || (data.antonyms && data.antonyms.length > 0)) { 
+                    content = ''; 
+                    if (data.synonyms && data.synonyms.length > 0) { 
+                        content += `<div><h4 class="font-semibold text-lg mb-2">Từ đồng nghĩa</h4>${data.synonyms.map(group => `<div class="mt-2 pl-4 border-l-2 border-indigo-200"><strong class="font-medium text-indigo-700">${group.nuance}:</strong><ul class="list-disc list-inside mt-1 space-y-2">${(group.words || []).map(w => `<li><button class="font-semibold text-blue-600 hover:underline focus:outline-none interactive-word-link" data-word="${w.word}">${w.word}</button>: ${w.meaning}<br><em class="text-slate-500 text-sm">"${w.example}"</em></li>`).join('')}</ul></div>`).join('')}</div>`; 
+                    } 
+                    if (data.antonyms && data.antonyms.length > 0) { 
+                        content += `<div class="mt-4"><h4 class="font-semibold text-lg mb-2">Từ trái nghĩa</h4><ul class="list-disc list-inside space-y-2">${(data.antonyms || []).map(w => `<li><button class="font-semibold text-blue-600 hover:underline focus:outline-none interactive-word-link" data-word="${w.word}">${w.word}</button>: ${w.meaning}<br><em class="text-slate-500 text-sm">"${w.example}"</em></li>`).join('')}</ul></div>`; 
+                    } 
+                } 
+                document.getElementById('synonyms-content').innerHTML = content; 
+            } catch (e) { 
+                document.getElementById('synonyms-content').innerHTML = `<p class="text-red-500">Lỗi khi tải dữ liệu.</p>`; 
+            } 
+        }
+        
+        async function fetchCollocations(word, button) { 
+            button.disabled = true; 
+            button.innerHTML = `<div class="spinner h-5 w-5 mx-auto"></div>`; 
+            const prompt = `Bạn là một chuyên gia từ điển cho người Việt. Cho từ "${word}", hãy cung cấp các cụm từ phổ biến (collocations) được phân loại để dễ học. Trả về một đối tượng JSON duy nhất có cấu trúc:{ "collocations": [ { "category": "Loại cụm từ (ví dụ: Verb + ${word})", "items": [ { "collocation": "cụm từ 1", "meaning": "nghĩa tiếng việt", "example": "câu ví dụ tiếng Anh" } ] } ] }`; 
+            try { 
+                const result = await model.generateContent(prompt); 
+                const data = JSON.parse(result.response.text().replace(/^```json\s*|```\s*$/g, '')); 
+                let content = '<p>Không tìm thấy thông tin.</p>'; 
+                if (data.collocations && data.collocations.length > 0) { 
+                    content = data.collocations.map(group => {
+                        const itemsHtml = (group.items || []).map(item => {
+                            const clickableCollocation = item.collocation.split(' ').map(part => `<button class="font-semibold text-blue-600 hover:underline focus:outline-none interactive-word-link" data-word="${part.replace(/[.,!?]/g, '')}">${part}</button>`).join(' ');
+                            return `<li>${clickableCollocation}: ${item.meaning}<br><em class="text-slate-500 text-sm">"${item.example}"</em></li>`;
+                        }).join('');
+                        return `<div class="mt-2"><h4 class="font-semibold text-yellow-800 bg-yellow-100 inline-block px-2 py-1 rounded-md">${group.category}</h4><ul class="list-disc list-inside mt-2 space-y-2 pl-4">${itemsHtml}</ul></div>`;
+                    }).join(''); 
+                } 
+                document.getElementById('collocations-content').innerHTML = content; 
+            } catch (e) { 
+                document.getElementById('collocations-content').innerHTML = `<p class="text-red-500">Lỗi khi tải dữ liệu.</p>`; 
+            } 
+        }
 
         // --- Thiết lập Event Listener ---
         function addResultEventListeners(data) {
@@ -776,9 +917,10 @@
                 const audioButton = target.closest('#audioButton');
                 const favoriteButton = target.closest('#favorite-btn');
                 const fetchInteractivesBtn = target.closest('#fetch-interactives-btn');
+                const interactiveWordLink = target.closest('.interactive-word-link');
 
                 if (audioButton) {
-                    speakText(data.word); // **MODIFIED: Use helper function**
+                    speakText(data.word);
                     return;
                 }
                 
@@ -789,16 +931,25 @@
 
                 if (playExampleBtn) {
                     const sentence = playExampleBtn.dataset.sentence;
-                    speakText(sentence); // **MODIFIED: Use helper function**
+                    speakText(sentence);
                     return;
                 }
 
-                if (wordFamilyLink) {
+                if (wordFamilyLink) { // Keep this for direct search
                     const wordToSearch = wordFamilyLink.dataset.word;
                     if (wordToSearch) {
                         wordInput.value = wordToSearch;
                         lookupWord();
-                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                        const mainContent = document.querySelector('main');
+                        mainContent.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+                    return;
+                }
+                
+                if (interactiveWordLink) {
+                    const wordToLookup = interactiveWordLink.dataset.word;
+                    if (wordToLookup) {
+                        quickLookup(wordToLookup);
                     }
                     return;
                 }
